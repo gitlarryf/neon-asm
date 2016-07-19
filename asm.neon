@@ -296,7 +296,6 @@ END FUNCTION
 
 FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number
     LET r: Number := struct.unpackUInt16BE(obj[i TO LAST].toBytes())
-    %LET r: Number := binary.or32(binary.shiftLeft32(obj[i], 8), obj[i+1])
     i := i + 2
     RETURN r
 END FUNCTION
@@ -421,13 +420,12 @@ FUNCTION makeOutputFilename(s: String): String
     file.pathSplit(s, OUT dir, OUT fn)
     IF NOT string.hasSuffix(fn, ".neona") THEN
         print("Not a valid neon assembly file.")
-        sys.exit(0)
+        sys.exit(1)
     END IF
     RETURN file.pathJoin(dir, fn[FIRST TO LAST-6] & ".neonx")
 END FUNCTION
 
 FUNCTION parseString(s: String): String
-    print("Parsing String: \(s)...")
     VAR i: Number := 0
     VAR r: String := ""
 
@@ -443,11 +441,11 @@ FUNCTION parseString(s: String): String
                 END IF
                 IF i >= s.length() THEN
                     print("unterminated string constant")
-                    sys.exit(-1)
+                    sys.exit(1)
                 END IF
                 IF c = "\n" THEN
                     print("unterminated string constant")
-                    sys.exit(-1)
+                    sys.exit(1)
                 END IF
                 r.append(c)
             END WHILE
@@ -488,7 +486,7 @@ FOREACH s IN lines INDEX i DO
         END CASE
     ELSE
         print("Invalid operand on line \(i): \(words[0])")
-        sys.exit(0xE0) % 0xE0 - Invalid operand.
+        sys.exit(1) % Invalid operand.
     END IF
 END FOREACH
 print("Compiled \(numLines) lines.")
