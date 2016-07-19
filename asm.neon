@@ -1,0 +1,497 @@
+IMPORT file
+IMPORT hash
+IMPORT sys
+IMPORT string
+IMPORT struct
+
+LET Tokens: Dictionary<Number> := {
+    "ENTER":        0, 
+    "LEAVE":        1,
+    "PUSHB":        2,
+    "PUSHN":        3, 
+    "PUSHS":        4,
+    "PUSHPG":       5,
+    "PUSHPPG":      6,
+    "PUSHPMG":      7, 
+    "PUSHPL":       8, 
+    "PUSHPOL":      9, 
+    "PUSHI":        10,
+    "LOADB":        11,
+    "LOADN":        12,
+    "LOADS":        13,
+    "LOADA":        14,
+    "LOADD":        15,
+    "LOADP":        16,
+    "STOREB":       17,
+    "STOREN":       18,
+    "STORES":       19,
+    "STOREA":       20,
+    "STORED":       21,
+    "STOREP":       22,
+    "NEGN":         23,
+    "ADDN":         24,
+    "SUBN":         25,
+    "MULN":         26,
+    "DIVN":         27,
+    "MODN":         28,
+    "EXPN":         29, 
+    "EQB":          30, 
+    "NEB":          31, 
+    "EQN":          32, 
+    "NEN":          33,
+    "LTN":          34,
+    "GTN":          35,
+    "LEN":          36,
+    "GEN":          37,
+    "EQS":          38,
+    "NES":          39,
+    "LTS":          40,
+    "GTS":          41,
+    "LES":          42,
+    "GES":          43,
+    "EQA":          44,
+    "NEA":          45,
+    "EQD":          46,
+    "NED":          47,
+    "EQP":          48,
+    "NEP":          49,
+    "ANDB":         50,
+    "ORB":          51,
+    "NOTB":         52,
+    "INDEXAR":      53, 
+    "INDEXAW":      54, 
+    "INDEXAV":      55, 
+    "INDEXAN":      56, 
+    "INDEXDR":      57, 
+    "INDEXDW":      58,  
+    "INDEXDV":      59, 
+    "INA":          60, 
+    "IND":          61,
+    "CALLP":        62, 
+    "CALLF":        63, 
+    "CALLMF":       64, 
+    "CALLI":        65, 
+    "JUMP":         66,
+    "JF":           67,
+    "JT":           68,
+    "JFCHAIN":      69,
+    "DUP":          70,
+    "DUPX1":        71,
+    "DROP":         72,
+    "RET":          73,
+    "CALLE":        74,
+    "CONSA":        75,
+    "CONSD":        76,
+    "EXCEPT":       77,
+    "CLREXC":       78,
+    "ALLOC":        79,
+    "PUSHNIL":      80,
+    "JNASSERT":     81,
+    "RESETC":       82,
+}
+
+LET source: String := sys.args[1]
+DECLARE EXCEPTION BytecodeException
+
+TYPE CodeBytes IS Array<Number>
+
+TYPE Type IS RECORD
+    name        : Number
+    descriptor  : Number
+END RECORD
+
+TYPE Function IS RECORD
+    name        : Number
+    descriptor  : Number
+    entry       : Number
+END RECORD
+
+TYPE Constant IS RECORD
+    name    : Number
+    type    : Number
+    value   : Array<Number>
+END RECORD
+
+TYPE Variable IS RECORD
+    name    : Number
+    type    : Number
+    index   : Number
+END RECORD
+
+TYPE ExceptionExport IS RECORD
+    name    : Number
+END RECORD
+
+TYPE ExceptInfo IS RECORD
+    start   : Number
+    end     : Number
+    excid   : Number
+    handler : Number
+END RECORD
+
+TYPE FunctionInfo IS RECORD
+    name    : Number
+    entry   : Number
+END RECORD
+
+TYPE Pair IS RECORD
+    first   : Number
+    second  : String
+END RECORD
+
+TYPE Bytecode IS RECORD
+    obj:                CodeBytes
+    source_hash:        Array<Number>
+    global_size:        Number
+    strtable:           Array<String>
+    export_types:       Array<Type>
+    export_constants:   Array<Constant>
+    export_variables:   Array<Variable>
+    export_functions:   Array<Function>
+    export_exceptions:  Array<ExceptionExport>
+    imports:            Array<Pair>
+    functions:          Array<FunctionInfo>
+    exceptions:         Array<ExceptInfo>
+    code:               CodeBytes
+END RECORD
+
+FUNCTION Bytecode.reset(INOUT self: Bytecode)
+    LET new: Bytecode := Bytecode()
+    self := new
+END FUNCTION
+ 
+FUNCTION Bytecode.fromBytes(self: Bytecode, bytes: Bytes): Bytecode
+    VAR r: Bytecode := Bytecode()
+    IF r.load(bytes.toArray()) THEN
+        RETURN r
+    END IF
+    RETURN Bytecode()
+END FUNCTION
+
+FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
+    self.obj := bytes
+    VAR i: Number := 0
+
+    TRY
+        IF self.obj.size() < 32 THEN
+            RAISE BytecodeException(info WITH "Invalid Neon Bytecode file.")
+        END IF
+        FOR x := 0 TO 31 DO
+            self.source_hash[x] := self.obj[i+x]
+        END FOR
+        i := i + 32
+        self.global_size := get_uint16(self.obj, INOUT i)
+
+        LET strtablesize: Number := get_uint32(self.obj, INOUT i)
+        IF (i+strtablesize > self.obj.size()) THEN
+            RAISE BytecodeException(info WITH "Corrupted String Table in .neonx file.")
+        END IF
+        self.strtable := getstrtable(i, i + strtablesize, self.obj)
+        i := i + strtablesize
+
+        VAR typesize: Number := get_uint16(self.obj, INOUT i)
+        WHILE typesize > 0 DO
+            VAR t: Type := Type()
+            t.name := get_uint16(self.obj, INOUT i)
+            t.descriptor := get_uint16(self.obj, INOUT i)
+            self.export_types.append(t)
+            DEC typesize
+        END WHILE
+
+        VAR constantsize: Number := get_uint16(self.obj, INOUT i)
+        WHILE constantsize > 0 DO
+            VAR c: Constant := Constant()
+            c.name := get_uint16(self.obj, INOUT i)
+            c.type := get_uint16(self.obj, INOUT i)
+            LET size: Number := get_uint16(self.obj, INOUT i)
+            IF (i+size > self.obj.size()) THEN
+                RAISE BytecodeException(info WITH "Corrupted constants in .neonx file.")
+            END IF
+            c.value := self.obj[i TO i+size]
+            i := i + size
+            self.export_constants.append(c)
+            DEC constantsize
+        END WHILE
+
+        VAR variablesize: Number := get_uint16(self.obj, INOUT i)
+        WHILE variablesize > 0 DO
+            VAR v: Variable := Variable()
+            v.name := get_uint16(self.obj, INOUT i)
+            v.type := get_uint16(self.obj, INOUT i)
+            v.index := get_uint16(self.obj, INOUT i)            
+            self.export_variables.append(v)
+            DEC variablesize
+        END WHILE
+
+        VAR functionsize: Number := get_uint16(self.obj, INOUT i)
+        WHILE functionsize > 0 DO
+            VAR f: Function := Function()
+            f.name := get_uint16(self.obj, INOUT i)
+            f.descriptor := get_uint16(self.obj, INOUT i)
+            f.entry := get_uint16(self.obj, INOUT i)            
+            self.export_functions.append(f)
+            DEC functionsize
+        END WHILE
+
+        VAR exceptionexportsize: Number := get_uint16(self.obj, INOUT i)
+        WHILE exceptionexportsize > 0 DO
+            VAR e: ExceptionExport := ExceptionExport()
+            e.name := get_uint16(self.obj, INOUT i)
+            self.export_exceptions.append(e)
+            DEC exceptionexportsize
+        END WHILE
+
+        VAR importsize: Number := get_uint16(self.obj, INOUT i)
+        WHILE importsize > 0 DO
+            VAR imp: Pair := Pair()
+            imp.first := get_uint16(self.obj, INOUT i)
+            IF (i+32 > self.obj.size()) THEN
+                RAISE BytecodeException(info WITH "Corrupted Import Table in neon excutable file.")
+            END IF
+            FOREACH s IN self.obj[i TO i+32] DO
+                imp.second.append(str(s))
+            END FOREACH
+            print("imp.second=\(imp.second)")
+            i := i + 32
+            self.imports.append(imp)
+            DEC importsize
+        END WHILE
+
+        functionsize := get_uint16(self.obj, INOUT i)
+        WHILE functionsize > 0 DO
+            VAR f: FunctionInfo := FunctionInfo()
+            f.name := get_uint16(self.obj, INOUT i)
+            f.entry := get_uint16(self.obj, INOUT i)
+            self.functions.append(f)
+            DEC functionsize
+        END WHILE
+        
+        VAR exceptionsize: Number := get_uint16(self.obj, INOUT i)
+        WHILE exceptionsize > 0 DO
+            VAR e: ExceptInfo := ExceptInfo()
+            e.start := get_uint16(self.obj, INOUT i)
+            e.end := get_uint16(self.obj, INOUT i)
+            e.excid := get_uint16(self.obj, INOUT i)
+            e.handler := get_uint16(self.obj, INOUT i)
+            self.exceptions.append(e)
+            DEC exceptionsize
+        END WHILE
+
+        self.code := self.obj[i TO LAST]
+    EXCEPTION BytecodeException DO
+        RAISE BytecodeException(info WITH CURRENT_EXCEPTION.info)
+        RETURN FALSE
+    END TRY
+
+    RETURN TRUE
+END FUNCTION
+
+FUNCTION put_uint16(INOUT obj: Array<Number>, x: Number)
+    obj.extend(struct.packUInt16BE(x).toArray())
+END FUNCTION
+
+FUNCTION put_uint32(INOUT obj: Array<Number>, x: Number)
+    obj.extend(struct.packUInt32BE(x).toArray())
+END FUNCTION
+
+FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number
+    LET r: Number := struct.unpackUInt16BE(obj[i TO LAST].toBytes())
+    %LET r: Number := binary.or32(binary.shiftLeft32(obj[i], 8), obj[i+1])
+    i := i + 2
+    RETURN r
+END FUNCTION
+
+FUNCTION get_uint32(IN obj: Array<Number>, INOUT i: Number): Number
+    LET r: Number := struct.unpackUInt32BE(obj[i TO LAST].toBytes())
+    i := i + 4
+    RETURN r
+END FUNCTION
+
+FUNCTION getstrtable(start, end: Number, obj: Array<Number>): Array<String>
+    VAR r: Array<String> := []
+    VAR s, e: Number := 0
+    s := start
+    e := end
+    WHILE s # e DO
+        LET len: Number := get_uint32(obj[s TO LAST], INOUT s)
+        VAR strent: String := ""
+        FOR x := s TO s+len-1 DO
+            strent.append(chr(obj[x]))
+            INC s
+        END FOR
+        r.append(strent)
+    END WHILE
+    RETURN r
+END FUNCTION
+
+FUNCTION Bytecode.addString(INOUT self: Bytecode, s: String): Number
+    FOREACH st IN self.strtable INDEX i DO
+        IF st = s THEN
+            RETURN i
+        END IF
+    END FOREACH
+    self.strtable.append(s)
+    RETURN self.strtable.size() - 1
+END FUNCTION
+
+FUNCTION Bytecode.referenceString(INOUT self: Bytecode, index: Number)
+    put_uint32(INOUT self.code, index)
+END FUNCTION
+
+FUNCTION Bytecode.toFile(self: Bytecode, fn: String)
+    file.writeBytes(fn, self.getBytes())
+END FUNCTION
+
+FUNCTION Bytecode.getBytes(self: Bytecode): Bytes
+    VAR obj: Array<Number> := []
+
+    ASSERT self.source_hash.size() = 32
+    obj.extend(self.source_hash)
+
+    put_uint16(INOUT obj, self.global_size)
+
+    VAR st: Array<Number> := []
+    FOREACH s IN self.strtable DO
+        put_uint32(INOUT st, s.length())
+        st.extend(s.toBytes().toArray())
+    END FOREACH
+    put_uint32(INOUT obj, st.size())
+    obj.extend(st)
+
+    put_uint16(INOUT obj, self.export_types.size())
+    FOREACH t IN self.export_types DO
+        put_uint16(INOUT obj, t.name)
+        put_uint16(INOUT obj, t.descriptor)
+    END FOREACH
+
+    put_uint16(INOUT obj, self.export_constants.size())
+    FOREACH c IN self.export_constants DO
+        put_uint16(INOUT obj, c.name)
+        put_uint16(INOUT obj, c.type)
+        put_uint16(INOUT obj, c.value.size())
+        obj.extend(c.value)
+    END FOREACH
+
+    put_uint16(INOUT obj, self.export_variables.size())
+    FOREACH v IN self.export_variables DO
+        put_uint16(INOUT obj, v.name)
+        put_uint16(INOUT obj, v.type)
+        put_uint16(INOUT obj, v.index)
+    END FOREACH
+
+    put_uint16(INOUT obj, self.export_functions.size())
+    FOREACH f IN self.export_functions DO
+        put_uint16(INOUT obj, f.name)
+        put_uint16(INOUT obj, f.descriptor)
+        put_uint16(INOUT obj, f.entry)
+    END FOREACH
+
+    put_uint16(INOUT obj, self.export_exceptions.size())
+    FOREACH e IN self.export_exceptions DO
+        put_uint16(INOUT obj, e.name)
+    END FOREACH
+
+    put_uint16(INOUT obj, self.imports.size())
+    FOREACH i IN self.imports DO
+        put_uint16(INOUT obj, i.first)
+        ASSERT i.second.length() = 32
+        obj.extend(i.second.toBytes().toArray())
+    END FOREACH
+    
+    put_uint16(INOUT obj, self.functions.size())
+    FOREACH f IN self.functions DO
+        put_uint16(INOUT obj, f.name)
+        put_uint16(INOUT obj, f.entry)
+    END FOREACH
+
+    put_uint16(INOUT obj, self.exceptions.size())
+    FOREACH e IN self.exceptions DO
+        put_uint16(INOUT obj, e.start)
+        put_uint16(INOUT obj, e.end)
+        put_uint16(INOUT obj, e.excid)
+        put_uint16(INOUT obj, e.handler)
+    END FOREACH
+
+    obj.extend(self.code)
+    RETURN obj.toBytes()
+END FUNCTION
+
+FUNCTION makeOutputFilename(s: String): String
+    VAR dir, fn: String := ""
+    file.pathSplit(s, OUT dir, OUT fn)
+    IF NOT string.hasSuffix(fn, ".neona") THEN
+        print("Not a valid neon assembly file.")
+        sys.exit(0)
+    END IF
+    RETURN file.pathJoin(dir, fn[FIRST TO LAST-6] & ".neonx")
+END FUNCTION
+
+FUNCTION parseString(s: String): String
+    print("Parsing String: \(s)...")
+    VAR i: Number := 0
+    VAR r: String := ""
+
+    WHILE i <= s.length() DO
+        VAR c: String := s[i]
+        IF c = "\"" THEN
+            INC i
+            WHILE i < s.length() DO
+                c := s[i]
+                INC i
+                IF c = "\"" THEN
+                    RETURN r
+                END IF
+                IF i >= s.length() THEN
+                    print("unterminated string constant")
+                    sys.exit(-1)
+                END IF
+                IF c = "\n" THEN
+                    print("unterminated string constant")
+                    sys.exit(-1)
+                END IF
+                r.append(c)
+            END WHILE
+        END IF
+        INC i
+        r.append(c)
+    END WHILE
+    RETURN r
+END FUNCTION
+
+LET outfn: String := makeOutputFilename(source)
+LET lines: Array<String> := file.readLines(source)
+VAR code: Bytecode := Bytecode()
+code.global_size := 1
+VAR numLines: Number := lines.size()
+
+FOREACH s IN lines INDEX i DO
+    VAR line: String := ""
+    LET words: Array<String> := string.split(s, " ")
+    IF words[0] IN Tokens THEN
+        code.code.append(Tokens[words[0]])
+        line.append(str(Tokens[words[0]]))
+        line.append("\t" & words[0])
+        LET operand: String := s[words[0].length() + 1 TO LAST]
+        CASE words[0]
+            WHEN "PUSHN" DO
+                LET ref: Number := code.addString(operand)
+                line.append(" \(ref)")
+                code.referenceString(ref)
+            WHEN "CALLP" DO
+                LET ref: Number := code.addString(operand)
+                line.append(" \(ref)")
+                code.referenceString(ref)
+            WHEN "PUSHS" DO
+                LET ref: Number := code.addString(parseString(operand))
+                line.append(" \(ref)")
+                code.referenceString(ref)
+        END CASE
+    ELSE
+        print("Invalid operand on line \(i): \(words[0])")
+        sys.exit(0xE0) % 0xE0 - Invalid operand.
+    END IF
+END FOREACH
+print("Compiled \(numLines) lines.")
+
+code.source_hash.extend(hash.sha256Raw(code.code.toString()).toArray())
+code.toFile(outfn)

@@ -1,0 +1,4 @@
+PUSHN 5
+CALLP str
+CALLP print
+RET

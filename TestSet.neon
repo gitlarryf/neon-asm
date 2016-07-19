@@ -1,0 +1,38 @@
+IMPORT file
+IMPORT os
+IMPORT string
+IMPORT sys
+
+LET path: String := os.getcwd() & file.Separator & "neon-asm/t/"
+LET asmblr: String := os.getcwd() & file.Separator & "neon-asm/asm.neon"
+
+VAR files: Array<String> := file.files(path)
+FOREACH test IN files DO
+    IF string.hasSuffix(test, ".neona") THEN
+        print("Compiling \(test)...")
+        LET neonx: Number := os.system(os.getcwd() & file.Separator & "bin/neon.exe " & asmblr & " " & path & test)
+        IF neonx # 0 THEN
+            sys.exit(2)
+        END IF
+        _ := os.system(os.getcwd() & file.Separator & "bin/neonx.exe " & path & makeOutputFilename(test) & " > " & path & "tmp/" & makeOutputFilename(test) & ".out")
+        LET data: Array<String> := file.readLines(path & makeOutputFilename(test) & ".expected")
+        LET actl: Array<String> := file.readLines(path & "tmp/" & makeOutputFilename(test) & ".out")
+        IF data # actl THEN
+            print("*** Test \(test) failed.\n*** Expected: \(data) Got: \(actl)")
+            print("\n\nTests failed.")
+            sys.exit(1)
+        END IF
+    END IF
+END FOREACH
+
+print("All tests passed!")
+
+FUNCTION makeOutputFilename(s: String): String
+    VAR dir, fn: String := ""
+    file.pathSplit(s, OUT dir, OUT fn)
+    IF NOT string.hasSuffix(fn, ".neona") THEN
+        print("Not a valid neon assembly file.")
+        sys.exit(0)
+    END IF
+    RETURN file.pathJoin(dir, fn[FIRST TO LAST-6] & ".neonx")
+END FUNCTION
