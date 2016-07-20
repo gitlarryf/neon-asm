@@ -1,0 +1,12 @@
+.GlobalSize: 1
+.const: a 1
+.const: b 1
+
+PUSHN 42
+PUSHPG a
+STOREN
+PUSHPG b
+LOADN
+CALLP str
+CALLP print
+RET

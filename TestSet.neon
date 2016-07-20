@@ -12,6 +12,7 @@ FOREACH test IN files DO
         print("Compiling \(test)...")
         LET neonx: Number := os.system(os.getcwd() & file.Separator & "bin/neon.exe " & asmblr & " " & path & test)
         IF neonx # 0 THEN
+            print("\n\n*** Test \(test) failed.")
             sys.exit(2)
         END IF
         _ := os.system(os.getcwd() & file.Separator & "bin/neonx.exe " & path & makeOutputFilename(test) & " > " & path & "tmp/" & makeOutputFilename(test) & ".out")

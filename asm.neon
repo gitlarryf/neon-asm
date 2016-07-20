@@ -7,91 +7,92 @@ IMPORT struct
 LET Tokens: Dictionary<Number> := {
     "ENTER":        0, 
     "LEAVE":        1,
-    "PUSHB":        2,
-    "PUSHN":        3,      %| push number immediate        |%
-    "PUSHS":        4,      %| push string immediate        |%
-    "PUSHPG":       5,      %| push pointer to global       |%
-    "PUSHPPG":      6,
-    "PUSHPMG":      7, 
-    "PUSHPL":       8, 
-    "PUSHPOL":      9,      %| push pointer to outer local  |%
-    "PUSHI":        10,     %| push 32-bit integer immediate|%
-    "LOADB":        11,     %| load boolean                 |%
-    "LOADN":        12,     %| load number                  |%
-    "LOADS":        13,     %| load string                  |%
-    "LOADA":        14,     %| load array                   |%
-    "LOADD":        15,     %| load dictionary              |%
-    "LOADP":        16,     %| load pointer                 |%
-    "STOREB":       17,     %| store boolean                |%
-    "STOREN":       18,     %| store number                 |%
-    "STORES":       19,     %| store string                 |%
-    "STOREA":       20,     %| store array                  |%
-    "STORED":       21,     %| store dictionary             |%
-    "STOREP":       22,     %| store pointer                |%
-    "NEGN":         23,     %| negate number                |%
-    "ADDN":         24,     %| add number                   |%
-    "SUBN":         25,     %| subtract number              |%
-    "MULN":         26,     %| multiply number              |%
-    "DIVN":         27,     %| divide number                |%
-    "MODN":         28,     %| modulo number                |%
-    "EXPN":         29,     %| exponentiate number          |%
-    "EQB":          30,     %| compare equal boolean        |%
-    "NEB":          31,     %| compare unequal boolean      |%
-    "EQN":          32,     %| compare equal number         |%
-    "NEN":          33,     %| compare unequal number       |%
-    "LTN":          34,     %| compare less number          |%
-    "GTN":          35,     %| compare greater number       |%
-    "LEN":          36,     %| compare less equal number    |%
-    "GEN":          37,     %| compare greater equal number |%
-    "EQS":          38,     %| compare equal string         |%
-    "NES":          39,     %| compare unequal string       |%
-    "LTS":          40,     %| compare less string          |%
-    "GTS":          41,     %| compare greater string       |%
-    "LES":          42,     %| compare less equal string    |%
-    "GES":          43,     %| compare greater equal string |%
-    "EQA":          44,     %| compare equal array          |%
-    "NEA":          45,     %| compare unequal array        |%
-    "EQD":          46,     %| compare equal dictionary     |%
-    "NED":          47,     %| compare unequal dictionary   |%
-    "EQP":          48,     %| compare equal pointer        |%
-    "NEP":          49,     %| compare unequal pointer      |%
-    "ANDB":         50,     %| and boolean                  |%
-    "ORB":          51,     %| or boolean                   |%
-    "NOTB":         52,     %| not boolean                  |%
-    "INDEXAR":      53,     %| index arrayfor read          |%
-    "INDEXAW":      54,     %| index arrayfor write         |%
-    "INDEXAV":      55,     %| index array value            |%
-    "INDEXAN":      56,     %| index array value,no except  |%
-    "INDEXDR":      57,     %| index dictionary for read    |%
-    "INDEXDW":      58,     %| index dictionary for write   |%
-    "INDEXDV":      59,     %| index dictionary value       |%
-    "INA":          60,     %| in array                     |%
-    "IND":          61,     %| in dictionary                |%
-    "CALLP":        62,     %| call predefined              |%
-    "CALLF":        63,     %| call function                |%
-    "CALLMF":       64,     %| call module function         |%
-    "CALLI":        65,     %| call indirect                |%
-    "JUMP":         66,     %| unconditional jump           |%
-    "JF":           67,     %| jump if false                |%
-    "JT":           68,     %| jump if true                 |%
-    "JFCHAIN":      69,     %| jump and drop next if false  |%
-    "DUP":          70,     %| duplicate                    |%
-    "DUPX1":        71,     %| duplicate under second value |%
-    "DROP":         72,     %| drop                         |%
-    "RET":          73,     %| return                       |%
-    "CALLE":        74,     %| call external                |%
-    "CONSA":        75,     %| construct array              |%
-    "CONSD":        76,     %| construct dictionary         |%
-    "EXCEPT":       77,     %| throw exception              |%
-    "CLREXC":       78,     %| clear exception              |%
-    "ALLOC":        79,     %| allocate record              |%
-    "PUSHNIL":      80,     %| push nil pointer             |%
-    "JNASSERT":     81,     %| jump if assertions disabled  |%
-    "RESETC":       82,     %| reset cell                   |%
+    "PUSHB":        2,      %| push boolean immediate               |%
+    "PUSHN":        3,      %| push number immediate                |%
+    "PUSHS":        4,      %| push string immediate                |%
+    "PUSHPG":       5,      %| push pointer to global               |%
+    "PUSHPPG":      6,      %| push pointer to predefined global    |%
+    "PUSHPMG":      7,      %| push pointer to module global        |%
+    "PUSHPL":       8,      %| push pointer to local                |%
+    "PUSHPOL":      9,      %| push pointer to outer local          |%
+    "PUSHI":        10,     %| push 32-bit integer immediate        |%
+    "LOADB":        11,     %| load boolean                         |%
+    "LOADN":        12,     %| load number                          |%
+    "LOADS":        13,     %| load string                          |%
+    "LOADA":        14,     %| load array                           |%
+    "LOADD":        15,     %| load dictionary                      |%
+    "LOADP":        16,     %| load pointer                         |%
+    "STOREB":       17,     %| store boolean                        |%
+    "STOREN":       18,     %| store number                         |%
+    "STORES":       19,     %| store string                         |%
+    "STOREA":       20,     %| store array                          |%
+    "STORED":       21,     %| store dictionary                     |%
+    "STOREP":       22,     %| store pointer                        |%
+    "NEGN":         23,     %| negate number                        |%
+    "ADDN":         24,     %| add number                           |%
+    "SUBN":         25,     %| subtract number                      |%
+    "MULN":         26,     %| multiply number                      |%
+    "DIVN":         27,     %| divide number                        |%
+    "MODN":         28,     %| modulo number                        |%
+    "EXPN":         29,     %| exponentiate number                  |%
+    "EQB":          30,     %| compare equal boolean                |%
+    "NEB":          31,     %| compare unequal boolean              |%
+    "EQN":          32,     %| compare equal number                 |%
+    "NEN":          33,     %| compare unequal number               |%
+    "LTN":          34,     %| compare less number                  |%
+    "GTN":          35,     %| compare greater number               |%
+    "LEN":          36,     %| compare less equal number            |%
+    "GEN":          37,     %| compare greater equal number         |%
+    "EQS":          38,     %| compare equal string                 |%
+    "NES":          39,     %| compare unequal string               |%
+    "LTS":          40,     %| compare less string                  |%
+    "GTS":          41,     %| compare greater string               |%
+    "LES":          42,     %| compare less equal string            |%
+    "GES":          43,     %| compare greater equal string         |%
+    "EQA":          44,     %| compare equal array                  |%
+    "NEA":          45,     %| compare unequal array                |%
+    "EQD":          46,     %| compare equal dictionary             |%
+    "NED":          47,     %| compare unequal dictionary           |%
+    "EQP":          48,     %| compare equal pointer                |%
+    "NEP":          49,     %| compare unequal pointer              |%
+    "ANDB":         50,     %| and boolean                          |%
+    "ORB":          51,     %| or boolean                           |%
+    "NOTB":         52,     %| not boolean                          |%
+    "INDEXAR":      53,     %| index arrayfor read                  |%
+    "INDEXAW":      54,     %| index arrayfor write                 |%
+    "INDEXAV":      55,     %| index array value                    |%
+    "INDEXAN":      56,     %| index array value,no except          |%
+    "INDEXDR":      57,     %| index dictionary for read            |%
+    "INDEXDW":      58,     %| index dictionary for write           |%
+    "INDEXDV":      59,     %| index dictionary value               |%
+    "INA":          60,     %| in array                             |%
+    "IND":          61,     %| in dictionary                        |%
+    "CALLP":        62,     %| call predefined                      |%
+    "CALLF":        63,     %| call function                        |%
+    "CALLMF":       64,     %| call module function                 |%
+    "CALLI":        65,     %| call indirect                        |%
+    "JUMP":         66,     %| unconditional jump                   |%
+    "JF":           67,     %| jump if false                        |%
+    "JT":           68,     %| jump if true                         |%
+    "JFCHAIN":      69,     %| jump and drop next if false          |%
+    "DUP":          70,     %| duplicate                            |%
+    "DUPX1":        71,     %| duplicate under second value         |%
+    "DROP":         72,     %| drop                                 |%
+    "RET":          73,     %| return                               |%
+    "CALLE":        74,     %| call external                        |%
+    "CONSA":        75,     %| construct array                      |%
+    "CONSD":        76,     %| construct dictionary                 |%
+    "EXCEPT":       77,     %| throw exception                      |%
+    "CLREXC":       78,     %| clear exception                      |%
+    "ALLOC":        79,     %| allocate record                      |%
+    "PUSHNIL":      80,     %| push nil pointer                     |%
+    "JNASSERT":     81,     %| jump if assertions disabled          |%
+    "RESETC":       82,     %| reset cell                           |%
 }
 
 LET Directives: Dictionary<Number> := {
-    ".GlobalSize":   1,      %| Sets the global variable size|%
+    ".GlobalSize":   1,     %| Sets the global variable size        |%
+    ".const":        2,     %| Sets a value to an Identifier        |%    
 }
 
 LET source: String := sys.args[1]
@@ -160,7 +161,7 @@ TYPE Bytecode IS RECORD
 END RECORD
 
 FUNCTION Bytecode.reset(INOUT self: Bytecode)
-    LET new: Bytecode := Bytecode()
+    LET new: Bytecode := Bytecode(global_size WITH 1)
     self := new
 END FUNCTION
  
@@ -467,11 +468,16 @@ END FUNCTION
 LET outfn: String := makeOutputFilename(source)
 LET lines: Array<String> := file.readLines(source)
 VAR code: Bytecode := Bytecode()
+VAR Constants: Dictionary<String> := {}
 code.global_size := 1
 VAR numLines: Number := lines.size()
 
 FOREACH s IN lines INDEX i DO
+    IF s = "" THEN 
+        NEXT FOREACH
+    END IF
     VAR line: String := ""
+    VAR ref: Number := 0
     LET words: Array<String> := string.split(s, " ")
     IF string.hasPrefix(words[0], ".") THEN
         LET directives: Array<String> := string.split(s, ":")
@@ -479,6 +485,17 @@ FOREACH s IN lines INDEX i DO
             CASE directives[0]
                 WHEN ".GlobalSize" DO
                     code.global_size := code.global_size + num(directives[1])
+                WHEN ".const" DO
+                    LET values: Array<String> := string.split(directives[1], " ")
+                    IF values.size() < 2 THEN
+                        print("Missing value:  Expected constant value; line \(i).")
+                        sys.exit(1)
+                    END IF
+                    IF values[0] IN Constants THEN
+                        print("Duplicate Identifier on line \(i): \(values[0])")
+                        sys.exit(1)
+                    END IF
+                    Constants[values[0]] := values[1]
             END CASE
         END IF
         NEXT FOREACH
@@ -490,19 +507,31 @@ FOREACH s IN lines INDEX i DO
         LET operand: String := s[words[0].length() + 1 TO LAST]
         CASE words[0]
             WHEN "PUSHN" DO                                         % push number immediate
-                LET ref: Number := code.addString(operand)
+                IF operand IN Constants THEN
+                    ref := code.addString(Constants[operand])
+                ELSE
+                    ref := code.addString(operand)
+                END IF
                 line.append(" \(ref)")
                 code.referenceString(ref)
             WHEN "CALLP" DO                                         % call predefined
-                LET ref: Number := code.addString(operand)
+                ref := code.addString(operand)
                 line.append(" \(ref)")
                 code.referenceString(ref)
             WHEN "PUSHS" DO                                         % push string immediate
-                LET ref: Number := code.addString(parseString(operand))
+                IF operand[0] # "\"" THEN
+                    print("Expected \".")
+                    sys.exit(1)
+                END IF
+                ref := code.addString(parseString(operand))
                 line.append(" \(ref)")
                 code.referenceString(ref)
             WHEN "PUSHPG" DO                                        % push pointer to global
-                LET ref: Number := num(operand)
+                IF operand IN Constants THEN
+                    ref := num(Constants[operand])
+                ELSE
+                    ref := num(operand)
+                END IF
                 line.append(" \(ref)")
                 code.referenceVariable(ref)
             WHEN "STOREN" DO                                        % store number
