@@ -8,86 +8,90 @@ LET Tokens: Dictionary<Number> := {
     "ENTER":        0, 
     "LEAVE":        1,
     "PUSHB":        2,
-    "PUSHN":        3, 
-    "PUSHS":        4,
-    "PUSHPG":       5,
+    "PUSHN":        3,      %| push number immediate        |%
+    "PUSHS":        4,      %| push string immediate        |%
+    "PUSHPG":       5,      %| push pointer to global       |%
     "PUSHPPG":      6,
     "PUSHPMG":      7, 
     "PUSHPL":       8, 
-    "PUSHPOL":      9, 
-    "PUSHI":        10,
-    "LOADB":        11,
-    "LOADN":        12,
-    "LOADS":        13,
-    "LOADA":        14,
-    "LOADD":        15,
-    "LOADP":        16,
-    "STOREB":       17,
-    "STOREN":       18,
-    "STORES":       19,
-    "STOREA":       20,
-    "STORED":       21,
-    "STOREP":       22,
-    "NEGN":         23,
-    "ADDN":         24,
-    "SUBN":         25,
-    "MULN":         26,
-    "DIVN":         27,
-    "MODN":         28,
-    "EXPN":         29, 
-    "EQB":          30, 
-    "NEB":          31, 
-    "EQN":          32, 
-    "NEN":          33,
-    "LTN":          34,
-    "GTN":          35,
-    "LEN":          36,
-    "GEN":          37,
-    "EQS":          38,
-    "NES":          39,
-    "LTS":          40,
-    "GTS":          41,
-    "LES":          42,
-    "GES":          43,
-    "EQA":          44,
-    "NEA":          45,
-    "EQD":          46,
-    "NED":          47,
-    "EQP":          48,
-    "NEP":          49,
-    "ANDB":         50,
-    "ORB":          51,
-    "NOTB":         52,
-    "INDEXAR":      53, 
-    "INDEXAW":      54, 
-    "INDEXAV":      55, 
-    "INDEXAN":      56, 
-    "INDEXDR":      57, 
-    "INDEXDW":      58,  
-    "INDEXDV":      59, 
-    "INA":          60, 
-    "IND":          61,
-    "CALLP":        62, 
-    "CALLF":        63, 
-    "CALLMF":       64, 
-    "CALLI":        65, 
-    "JUMP":         66,
-    "JF":           67,
-    "JT":           68,
-    "JFCHAIN":      69,
-    "DUP":          70,
-    "DUPX1":        71,
-    "DROP":         72,
-    "RET":          73,
-    "CALLE":        74,
-    "CONSA":        75,
-    "CONSD":        76,
-    "EXCEPT":       77,
-    "CLREXC":       78,
-    "ALLOC":        79,
-    "PUSHNIL":      80,
-    "JNASSERT":     81,
-    "RESETC":       82,
+    "PUSHPOL":      9,      %| push pointer to outer local  |%
+    "PUSHI":        10,     %| push 32-bit integer immediate|%
+    "LOADB":        11,     %| load boolean                 |%
+    "LOADN":        12,     %| load number                  |%
+    "LOADS":        13,     %| load string                  |%
+    "LOADA":        14,     %| load array                   |%
+    "LOADD":        15,     %| load dictionary              |%
+    "LOADP":        16,     %| load pointer                 |%
+    "STOREB":       17,     %| store boolean                |%
+    "STOREN":       18,     %| store number                 |%
+    "STORES":       19,     %| store string                 |%
+    "STOREA":       20,     %| store array                  |%
+    "STORED":       21,     %| store dictionary             |%
+    "STOREP":       22,     %| store pointer                |%
+    "NEGN":         23,     %| negate number                |%
+    "ADDN":         24,     %| add number                   |%
+    "SUBN":         25,     %| subtract number              |%
+    "MULN":         26,     %| multiply number              |%
+    "DIVN":         27,     %| divide number                |%
+    "MODN":         28,     %| modulo number                |%
+    "EXPN":         29,     %| exponentiate number          |%
+    "EQB":          30,     %| compare equal boolean        |%
+    "NEB":          31,     %| compare unequal boolean      |%
+    "EQN":          32,     %| compare equal number         |%
+    "NEN":          33,     %| compare unequal number       |%
+    "LTN":          34,     %| compare less number          |%
+    "GTN":          35,     %| compare greater number       |%
+    "LEN":          36,     %| compare less equal number    |%
+    "GEN":          37,     %| compare greater equal number |%
+    "EQS":          38,     %| compare equal string         |%
+    "NES":          39,     %| compare unequal string       |%
+    "LTS":          40,     %| compare less string          |%
+    "GTS":          41,     %| compare greater string       |%
+    "LES":          42,     %| compare less equal string    |%
+    "GES":          43,     %| compare greater equal string |%
+    "EQA":          44,     %| compare equal array          |%
+    "NEA":          45,     %| compare unequal array        |%
+    "EQD":          46,     %| compare equal dictionary     |%
+    "NED":          47,     %| compare unequal dictionary   |%
+    "EQP":          48,     %| compare equal pointer        |%
+    "NEP":          49,     %| compare unequal pointer      |%
+    "ANDB":         50,     %| and boolean                  |%
+    "ORB":          51,     %| or boolean                   |%
+    "NOTB":         52,     %| not boolean                  |%
+    "INDEXAR":      53,     %| index arrayfor read          |%
+    "INDEXAW":      54,     %| index arrayfor write         |%
+    "INDEXAV":      55,     %| index array value            |%
+    "INDEXAN":      56,     %| index array value,no except  |%
+    "INDEXDR":      57,     %| index dictionary for read    |%
+    "INDEXDW":      58,     %| index dictionary for write   |%
+    "INDEXDV":      59,     %| index dictionary value       |%
+    "INA":          60,     %| in array                     |%
+    "IND":          61,     %| in dictionary                |%
+    "CALLP":        62,     %| call predefined              |%
+    "CALLF":        63,     %| call function                |%
+    "CALLMF":       64,     %| call module function         |%
+    "CALLI":        65,     %| call indirect                |%
+    "JUMP":         66,     %| unconditional jump           |%
+    "JF":           67,     %| jump if false                |%
+    "JT":           68,     %| jump if true                 |%
+    "JFCHAIN":      69,     %| jump and drop next if false  |%
+    "DUP":          70,     %| duplicate                    |%
+    "DUPX1":        71,     %| duplicate under second value |%
+    "DROP":         72,     %| drop                         |%
+    "RET":          73,     %| return                       |%
+    "CALLE":        74,     %| call external                |%
+    "CONSA":        75,     %| construct array              |%
+    "CONSD":        76,     %| construct dictionary         |%
+    "EXCEPT":       77,     %| throw exception              |%
+    "CLREXC":       78,     %| clear exception              |%
+    "ALLOC":        79,     %| allocate record              |%
+    "PUSHNIL":      80,     %| push nil pointer             |%
+    "JNASSERT":     81,     %| jump if assertions disabled  |%
+    "RESETC":       82,     %| reset cell                   |%
+}
+
+LET Directives: Dictionary<Number> := {
+    ".GlobalSize":   1,      %| Sets the global variable size|%
 }
 
 LET source: String := sys.args[1]
@@ -337,6 +341,10 @@ FUNCTION Bytecode.referenceString(INOUT self: Bytecode, index: Number)
     put_uint32(INOUT self.code, index)
 END FUNCTION
 
+FUNCTION Bytecode.referenceVariable(INOUT self: Bytecode, Value: Number)
+    put_uint32(INOUT self.code, Value)
+END FUNCTION
+
 FUNCTION Bytecode.toFile(self: Bytecode, fn: String)
     file.writeBytes(fn, self.getBytes())
 END FUNCTION
@@ -465,29 +473,48 @@ VAR numLines: Number := lines.size()
 FOREACH s IN lines INDEX i DO
     VAR line: String := ""
     LET words: Array<String> := string.split(s, " ")
+    IF string.hasPrefix(words[0], ".") THEN
+        LET directives: Array<String> := string.split(s, ":")
+        IF directives[0] IN Directives THEN
+            CASE directives[0]
+                WHEN ".GlobalSize" DO
+                    code.global_size := code.global_size + num(directives[1])
+            END CASE
+        END IF
+        NEXT FOREACH
+    END IF
     IF words[0] IN Tokens THEN
         code.code.append(Tokens[words[0]])
         line.append(str(Tokens[words[0]]))
         line.append("\t" & words[0])
         LET operand: String := s[words[0].length() + 1 TO LAST]
         CASE words[0]
-            WHEN "PUSHN" DO
+            WHEN "PUSHN" DO                                         % push number immediate
                 LET ref: Number := code.addString(operand)
                 line.append(" \(ref)")
                 code.referenceString(ref)
-            WHEN "CALLP" DO
+            WHEN "CALLP" DO                                         % call predefined
                 LET ref: Number := code.addString(operand)
                 line.append(" \(ref)")
                 code.referenceString(ref)
-            WHEN "PUSHS" DO
+            WHEN "PUSHS" DO                                         % push string immediate
                 LET ref: Number := code.addString(parseString(operand))
                 line.append(" \(ref)")
                 code.referenceString(ref)
+            WHEN "PUSHPG" DO                                        % push pointer to global
+                LET ref: Number := num(operand)
+                line.append(" \(ref)")
+                code.referenceVariable(ref)
+            WHEN "STOREN" DO                                        % store number
+                line.append("") % TODO: print the variable name, or imediate value if there is one.
+            WHEN "LOADN" DO                                         % load number
+                line.append("") % TODO: print the variable name, or imediate value if there is one.
         END CASE
     ELSE
         print("Invalid operand on line \(i): \(words[0])")
         sys.exit(1) % Invalid operand.
     END IF
+    print(line)
 END FOREACH
 print("Compiled \(numLines) lines.")
 

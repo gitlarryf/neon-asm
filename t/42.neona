@@ -1,0 +1,9 @@
+.GlobalSize: 1
+PUSHN 42
+PUSHPG 1
+STOREN
+PUSHPG 1
+LOADN
+CALLP str
+CALLP print
+RET
