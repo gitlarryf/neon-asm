@@ -300,8 +300,16 @@ FUNCTION Bytecode.referenceVariable(INOUT self: Bytecode, Value: Number)
     put_uint32(INOUT self.code, Value)
 END FUNCTION
 
+FUNCTION Bytecode.referenceAddress(INOUT self: Bytecode, address: Number)
+    put_uint32(INOUT self.code, address)
+END FUNCTION
+
 FUNCTION Bytecode.toFile(INOUT self: Bytecode, fn: String)
     file.writeBytes(fn, self.getBytes())
+END FUNCTION
+
+FUNCTION Bytecode.getCurrentAddress(INOUT self: Bytecode): Number
+    RETURN self.code.size()
 END FUNCTION
 
 FUNCTION Bytecode.getBytes(INOUT self: Bytecode): Bytes

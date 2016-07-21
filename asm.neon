@@ -142,6 +142,7 @@ LET lines: Array<String> := file.readLines(source)
 VAR code: Bytecode.Bytecode := Bytecode.Bytecode()
 code.reset()
 VAR Constants: Dictionary<String> := {}
+VAR Labels: Dictionary<Number> := {}
 VAR numLines: Number := lines.size()
 
 FOREACH s IN lines INDEX i DO
@@ -152,6 +153,14 @@ FOREACH s IN lines INDEX i DO
     VAR ln: String := s
     IF string.find(s, ";") > 0 THEN
         ln := string.trim(s[FIRST TO string.find(s, ";")-1])
+    END IF
+    IF ln[0] = ":" THEN
+        IF ln[1 TO LAST] IN Labels THEN
+            print("Duplicate label definition on line \(i).")
+            sys.exit(1)
+        END IF
+        Labels[ln[1 TO LAST]] := code.getCurrentAddress()
+        NEXT FOREACH
     END IF
     VAR ref: Number := 0
     LET words: Array<String> := string.split(ln, " ")
@@ -214,6 +223,15 @@ FOREACH s IN lines INDEX i DO
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
             WHEN "LOADN" DO                                         % load number
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
+            WHEN "JUMP" DO
+                IF operand IN Labels THEN
+                    ref := Labels[operand]
+                ELSE
+                    print("Undefined label: \(operand) on line \(i).")
+                    sys.exit(1)
+                END IF
+                code.referenceAddress(ref)
+                line.append(" \(ref)")
         END CASE
     ELSE
         print("Invalid operand on line \(i): \(words[0])")
