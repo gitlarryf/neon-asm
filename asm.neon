@@ -137,22 +137,31 @@ FUNCTION parseString(s: String): String
     RETURN r
 END FUNCTION
 
+TYPE Label IS Dictionary<Number>
+
+TYPE JumpTable IS RECORD
+    location: Number
+    label: String
+    line: Number
+END RECORD
+
 LET outfn: String := makeOutputFilename(source)
 LET lines: Array<String> := file.readLines(source)
 VAR code: Bytecode.Bytecode := Bytecode.Bytecode()
 code.reset()
 VAR Constants: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
+VAR Fixups: Array<JumpTable> := []
 VAR numLines: Number := lines.size()
 
 FOREACH s IN lines INDEX i DO
-    IF s = "" OR s[0] = ";" THEN
+    IF s = "" OR s[0] = ";" THEN % ignore blank, and commented out lines.
         NEXT FOREACH
     END IF
     VAR line: String := ""
     VAR ln: String := s
     IF string.find(s, ";") > 0 THEN
-        ln := string.trim(s[FIRST TO string.find(s, ";")-1])
+        ln := string.trim(s[FIRST TO string.find(s, ";")-1]) % Eat comments before processing the code.
     END IF
     IF ln[0] = ":" THEN
         IF ln[1 TO LAST] IN Labels THEN
@@ -186,9 +195,9 @@ FOREACH s IN lines INDEX i DO
         NEXT FOREACH
     END IF
     IF words[0] IN Tokens THEN
+        line.append("\(code.getCurrentAddress())\t")
         code.code.append(Tokens[words[0]])
-        line.append(str(Tokens[words[0]]))
-        line.append("\t" & words[0])
+        line.append(words[0])
         LET operand: String := ln[words[0].length() + 1 TO LAST]
         CASE words[0]
             WHEN "PUSHN" DO                                         % push number immediate
@@ -223,12 +232,16 @@ FOREACH s IN lines INDEX i DO
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
             WHEN "LOADN" DO                                         % load number
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
-            WHEN "JUMP" DO
+            WHEN "JUMP", "JF" DO
                 IF operand IN Labels THEN
                     ref := Labels[operand]
                 ELSE
-                    print("Undefined label: \(operand) on line \(i).")
-                    sys.exit(1)
+                    LET fixup: JumpTable := JumpTable(location WITH code.getCurrentAddress(),
+                                                      label WITH operand,
+                                                      line WITH i)
+                    ref := 0
+                    Fixups.append(fixup)
+                    line.append(" [ForwardDecl]: ")
                 END IF
                 code.referenceAddress(ref)
                 line.append(" \(ref)")
@@ -238,6 +251,15 @@ FOREACH s IN lines INDEX i DO
         sys.exit(1) % Invalid operand.
     END IF
     print(line)
+END FOREACH
+
+FOREACH f IN Fixups DO
+    IF f.label IN Labels THEN
+        code.fixupAddress(f.location, Labels[f.label])
+    ELSE
+        print("Undefined label: \(f.label) on line \(f.line).")
+        sys.exit(1)
+    END IF
 END FOREACH
 print("Compiled \(numLines) lines.")
 

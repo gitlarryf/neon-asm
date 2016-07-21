@@ -1,0 +1,20 @@
+; VAR a: Number := 1
+; IF a = 1 THEN
+;   print("one")
+; END IF
+
+.GlobalSize: 1
+.const: a 1
+
+PUSHN 1
+PUSHPG a
+STOREN
+PUSHPG a
+LOADN
+PUSHN 1
+EQN
+JF done
+PUSHS "one"
+CALLP print
+:done
+RET

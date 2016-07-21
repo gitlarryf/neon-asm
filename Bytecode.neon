@@ -253,6 +253,10 @@ FUNCTION put_uint32(INOUT obj: Array<Number>, x: Number)
     obj.extend(struct.packUInt32BE(x).toArray())
 END FUNCTION
 
+FUNCTION set_uint32(INOUT obj: Array<Number>, addr: Number, value: Number)
+    obj[addr TO addr+3]  := struct.packUInt32BE(value).toArray()
+END FUNCTION
+
 FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number
     LET r: Number := struct.unpackUInt16BE(obj[i TO LAST].toBytes())
     i := i + 2
@@ -302,6 +306,10 @@ END FUNCTION
 
 FUNCTION Bytecode.referenceAddress(INOUT self: Bytecode, address: Number)
     put_uint32(INOUT self.code, address)
+END FUNCTION
+
+FUNCTION Bytecode.fixupAddress(INOUT self: Bytecode, address: Number, value: Number)
+    set_uint32(INOUT self.code, address, value)
 END FUNCTION
 
 FUNCTION Bytecode.toFile(INOUT self: Bytecode, fn: String)
