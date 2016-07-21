@@ -145,14 +145,18 @@ VAR Constants: Dictionary<String> := {}
 VAR numLines: Number := lines.size()
 
 FOREACH s IN lines INDEX i DO
-    IF s = "" THEN 
+    IF s = "" OR s[0] = ";" THEN
         NEXT FOREACH
     END IF
     VAR line: String := ""
+    VAR ln: String := s
+    IF string.find(s, ";") > 0 THEN
+        ln := string.trim(s[FIRST TO string.find(s, ";")-1])
+    END IF
     VAR ref: Number := 0
-    LET words: Array<String> := string.split(s, " ")
+    LET words: Array<String> := string.split(ln, " ")
     IF string.hasPrefix(words[0], ".") THEN
-        LET directives: Array<String> := string.split(s, ":")
+        LET directives: Array<String> := string.split(ln, ":")
         IF directives[0] IN Directives THEN
             CASE directives[0]
                 WHEN ".GlobalSize" DO
@@ -176,7 +180,7 @@ FOREACH s IN lines INDEX i DO
         code.code.append(Tokens[words[0]])
         line.append(str(Tokens[words[0]]))
         line.append("\t" & words[0])
-        LET operand: String := s[words[0].length() + 1 TO LAST]
+        LET operand: String := ln[words[0].length() + 1 TO LAST]
         CASE words[0]
             WHEN "PUSHN" DO                                         % push number immediate
                 IF operand IN Constants THEN

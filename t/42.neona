@@ -1,9 +1,14 @@
-.GlobalSize: 1
-PUSHN 42
-PUSHPG 1
-STOREN
-PUSHPG 1
-LOADN
-CALLP str
-CALLP print
-RET
+; Test: 42.neona 
+; Desc: Test a global variable assignment
+; Outp: 42
+
+.GlobalSize: 1 ; Increase the global variable space by one.
+
+PUSHN 42    ; Push 42 on the stack
+PUSHPG 1    ; Push a pointer to the global variable slot we added above.
+STOREN      ; Store the value on the top of the stack to our global variable.
+PUSHPG 1    ; Push a pointer to the first global variable.
+LOADN       ; Load the value of the global variable, and store it on the stack.
+CALLP str   ; Call predifined function str(), store result on the top of the stack.
+CALLP print ; Call predifined function print(), with the parameter on the top of the stack.
+RET         ; Return
