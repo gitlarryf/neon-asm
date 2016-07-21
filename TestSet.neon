@@ -7,6 +7,13 @@ LET path: String := os.getcwd() & file.Separator & "neon-asm/t/"
 LET asmblr: String := os.getcwd() & file.Separator & "neon-asm/asm.neon"
 
 VAR files: Array<String> := file.files(path)
+print("Cleaning up before testing...")
+FOREACH bin IN files DO
+    IF string.hasSuffix(bin, ".neonx") THEN
+        file.delete(bin)
+    END IF
+END FOREACH
+
 FOREACH test IN files DO
     IF string.hasSuffix(test, ".neona") THEN
         print("Compiling \(test)...")
