@@ -296,6 +296,16 @@ FUNCTION Bytecode.addString(INOUT self: Bytecode, s: String): Number
     RETURN self.strtable.size() - 1
 END FUNCTION
 
+FUNCTION Bytecode.addFunction(INOUT self: Bytecode, fi: FunctionInfo)
+    FOREACH f IN self.functions INDEX i DO
+        IF self.strtable[fi.name] = self.strtable[f.name] THEN
+            self.functions[i].entry := fi.entry
+            EXIT FUNCTION
+        END IF
+    END FOREACH
+    self.functions.append(fi)
+END FUNCTION
+
 FUNCTION Bytecode.referenceString(INOUT self: Bytecode, index: Number)
     put_uint32(INOUT self.code, index)
 END FUNCTION

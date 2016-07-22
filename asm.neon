@@ -3,6 +3,8 @@ IMPORT file
 IMPORT sys
 IMPORT string
 
+TYPE FunctionInfo IS Bytecode.FunctionInfo
+
 LET Tokens: Dictionary<Number> := {
     "ENTER":        0, 
     "LEAVE":        1,
@@ -91,7 +93,8 @@ LET Tokens: Dictionary<Number> := {
 
 LET Directives: Dictionary<Number> := {
     ".GlobalSize":   1,     %| Sets the global variable size        |%
-    ".const":        2,     %| Sets a value to an Identifier        |%    
+    ".const":        2,     %| Sets a value to an Identifier        |%
+    ".Global":       2,     %| Function Declration                  |%
 }
 
 LET source: String := sys.args[1]
@@ -149,20 +152,24 @@ LET outfn: String := makeOutputFilename(source)
 LET lines: Array<String> := file.readLines(source)
 VAR code: Bytecode.Bytecode := Bytecode.Bytecode()
 code.reset()
+VAR Functions: Dictionary<FunctionInfo> := {}
 VAR Constants: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
 VAR Fixups: Array<JumpTable> := []
 VAR numLines: Number := lines.size()
 
 FOREACH s IN lines INDEX i DO
-    IF s = "" OR s[0] = ";" THEN % ignore blank, and commented out lines.
+    VAR line: String := ""
+    VAR ln: String := string.trim(s)
+
+    IF s = "" OR s[FIRST] = ";" THEN % ignore blank, and commented out lines.
         NEXT FOREACH
     END IF
-    VAR line: String := ""
-    VAR ln: String := s
+
     IF string.find(s, ";") > 0 THEN
         ln := string.trim(s[FIRST TO string.find(s, ";")-1]) % Eat comments before processing the code.
     END IF
+
     IF ln[0] = ":" THEN
         IF ln[1 TO LAST] IN Labels THEN
             print("Duplicate label definition on line \(i).")
@@ -171,16 +178,17 @@ FOREACH s IN lines INDEX i DO
         Labels[ln[1 TO LAST]] := code.getCurrentAddress()
         NEXT FOREACH
     END IF
+    
     VAR ref: Number := 0
-    LET words: Array<String> := string.split(ln, " ")
+    LET words: Array<String> := string.split(string.trim(ln), " ")
     IF string.hasPrefix(words[0], ".") THEN
-        LET directives: Array<String> := string.split(ln, ":")
+        LET directives: Array<String> := string.split(string.trim(ln), ":")
         IF directives[0] IN Directives THEN
             CASE directives[0]
                 WHEN ".GlobalSize" DO
-                    code.global_size := code.global_size + num(directives[1])
+                    code.global_size := code.global_size + num(string.trim(directives[1]))
                 WHEN ".const" DO
-                    LET values: Array<String> := string.split(directives[1], " ")
+                    LET values: Array<String> := string.split(string.trim(directives[1]), " ")
                     IF values.size() < 2 THEN
                         print("Missing value:  Expected constant value; line \(i).")
                         sys.exit(1)
@@ -189,16 +197,23 @@ FOREACH s IN lines INDEX i DO
                         print("Duplicate Identifier on line \(i): \(values[0])")
                         sys.exit(1)
                     END IF
-                    Constants[values[0]] := values[1]
+                    Constants[values[0]] := string.trim(values[1])
+                WHEN ".Global" DO
+                    VAR f: FunctionInfo := FunctionInfo()
+                    print("Adding function: \(string.trim(directives[1]))...")
+                    f.name := code.addString(string.trim(directives[1]))
+                    f.entry:= -1
+                    Functions[directives[1]] := f
             END CASE
         END IF
         NEXT FOREACH
     END IF
+
     IF words[0] IN Tokens THEN
         line.append("\(code.getCurrentAddress())\t")
         code.code.append(Tokens[words[0]])
         line.append(words[0])
-        LET operand: String := ln[words[0].length() + 1 TO LAST]
+        LET operand: String := string.trim(ln[string.find(ln, " ") + 1 TO LAST])
         CASE words[0]
             WHEN "PUSHN" DO                                         % push number immediate
                 IF operand IN Constants THEN
@@ -208,7 +223,7 @@ FOREACH s IN lines INDEX i DO
                 END IF
                 line.append(" \(ref)")
                 code.referenceString(ref)
-            WHEN "CALLP" DO                                         % call predefined
+            WHEN "CALLP" DO                                % call
                 ref := code.addString(operand)
                 line.append(" \(ref)")
                 code.referenceString(ref)
@@ -232,19 +247,28 @@ FOREACH s IN lines INDEX i DO
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
             WHEN "LOADN" DO                                         % load number
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
-            WHEN "JUMP", "JF" DO
+            WHEN "JUMP", "JF", "CALLF" DO
                 IF operand IN Labels THEN
                     ref := Labels[operand]
                 ELSE
                     LET fixup: JumpTable := JumpTable(location WITH code.getCurrentAddress(),
-                                                      label WITH operand,
-                                                      line WITH i)
+                                                         label WITH operand,
+                                                          line WITH i)
                     ref := 0
                     Fixups.append(fixup)
                     line.append(" [ForwardDecl]: ")
                 END IF
                 code.referenceAddress(ref)
                 line.append(" \(ref)")
+            WHEN OTHERS DO
+                IF words[0][LAST] = ":" THEN % Function Header
+                    print("Creating function...")
+                    LET func: String := words[0][FIRST TO LAST-1]
+                    IF func IN Functions THEN
+                        Labels[func] := code.getCurrentAddress()
+                        Functions[func].entry := Labels[func]
+                    END IF
+                END IF
         END CASE
     ELSE
         print("Invalid operand on line \(i): \(words[0])")
