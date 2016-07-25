@@ -1,0 +1,34 @@
+; - Call the four() function, which takes no parameters.
+CALLF four
+CALLP str
+CALLP print
+
+; - Call the square() function, with 5 as the parameter.
+PUSHN 5
+CALLF sq
+CALLP str
+CALLP print
+ 
+; - Call the add() function, with 4 and 5 as the two parameters.
+PUSHN 4
+PUSHN 5
+CALLF add
+CALLP str
+CALLP print
+RET
+    
+.begin: four
+    PUSHN 4
+    RET
+.end
+
+.begin: sq
+    DUP
+    MULN
+    RET
+.end
+
+.begin: add
+    ADDN
+    RET
+.end

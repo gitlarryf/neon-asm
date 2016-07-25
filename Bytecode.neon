@@ -131,116 +131,111 @@ FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
     self.obj := bytes
     VAR i: Number := 0
 
-    TRY
-        IF self.obj.size() < 32 THEN
-            RAISE BytecodeException(info WITH "Invalid Neon Bytecode file.")
+    IF self.obj.size() < 32 THEN
+        RAISE BytecodeException(info WITH "Invalid Neon Bytecode file.")
+    END IF
+    FOR x := 0 TO 31 DO
+        self.source_hash[x] := self.obj[i+x]
+    END FOR
+    i := i + 32
+    self.global_size := get_uint16(self.obj, INOUT i)
+
+    LET strtablesize: Number := get_uint32(self.obj, INOUT i)
+    IF (i+strtablesize > self.obj.size()) THEN
+        RAISE BytecodeException(info WITH "Corrupted String Table in .neonx file.")
+    END IF
+    self.strtable := getstrtable(i, i + strtablesize, self.obj)
+    i := i + strtablesize
+
+    VAR typesize: Number := get_uint16(self.obj, INOUT i)
+    WHILE typesize > 0 DO
+        VAR t: Type := Type()
+        t.name := get_uint16(self.obj, INOUT i)
+        t.descriptor := get_uint16(self.obj, INOUT i)
+        self.export_types.append(t)
+        DEC typesize
+    END WHILE
+
+    VAR constantsize: Number := get_uint16(self.obj, INOUT i)
+    WHILE constantsize > 0 DO
+        VAR c: Constant := Constant()
+        c.name := get_uint16(self.obj, INOUT i)
+        c.type := get_uint16(self.obj, INOUT i)
+        LET size: Number := get_uint16(self.obj, INOUT i)
+        IF (i+size > self.obj.size()) THEN
+            RAISE BytecodeException(info WITH "Corrupted constants in .neonx file.")
         END IF
-        FOR x := 0 TO 31 DO
-            self.source_hash[x] := self.obj[i+x]
-        END FOR
+        c.value := self.obj[i TO i+size]
+        i := i + size
+        self.export_constants.append(c)
+        DEC constantsize
+    END WHILE
+
+    VAR variablesize: Number := get_uint16(self.obj, INOUT i)
+    WHILE variablesize > 0 DO
+        VAR v: Variable := Variable()
+        v.name := get_uint16(self.obj, INOUT i)
+        v.type := get_uint16(self.obj, INOUT i)
+        v.index := get_uint16(self.obj, INOUT i)            
+        self.export_variables.append(v)
+        DEC variablesize
+    END WHILE
+
+    VAR functionsize: Number := get_uint16(self.obj, INOUT i)
+    WHILE functionsize > 0 DO
+        VAR f: Function := Function()
+        f.name := get_uint16(self.obj, INOUT i)
+        f.descriptor := get_uint16(self.obj, INOUT i)
+        f.entry := get_uint16(self.obj, INOUT i)            
+        self.export_functions.append(f)
+        DEC functionsize
+    END WHILE
+
+    VAR exceptionexportsize: Number := get_uint16(self.obj, INOUT i)
+    WHILE exceptionexportsize > 0 DO
+        VAR e: ExceptionExport := ExceptionExport()
+        e.name := get_uint16(self.obj, INOUT i)
+        self.export_exceptions.append(e)
+        DEC exceptionexportsize
+    END WHILE
+
+    VAR importsize: Number := get_uint16(self.obj, INOUT i)
+    WHILE importsize > 0 DO
+        VAR imp: Pair := Pair()
+        imp.first := get_uint16(self.obj, INOUT i)
+        IF (i+32 > self.obj.size()) THEN
+            RAISE BytecodeException(info WITH "Corrupted Import Table in neon excutable file.")
+        END IF
+        FOREACH s IN self.obj[i TO i+32] DO
+            imp.second.append(str(s))
+        END FOREACH
+        print("imp.second=\(imp.second)")
         i := i + 32
-        self.global_size := get_uint16(self.obj, INOUT i)
+        self.imports.append(imp)
+        DEC importsize
+    END WHILE
 
-        LET strtablesize: Number := get_uint32(self.obj, INOUT i)
-        IF (i+strtablesize > self.obj.size()) THEN
-            RAISE BytecodeException(info WITH "Corrupted String Table in .neonx file.")
-        END IF
-        self.strtable := getstrtable(i, i + strtablesize, self.obj)
-        i := i + strtablesize
+    functionsize := get_uint16(self.obj, INOUT i)
+    WHILE functionsize > 0 DO
+        VAR f: FunctionInfo := FunctionInfo()
+        f.name := get_uint16(self.obj, INOUT i)
+        f.entry := get_uint16(self.obj, INOUT i)
+        self.functions.append(f)
+        DEC functionsize
+    END WHILE
+    
+    VAR exceptionsize: Number := get_uint16(self.obj, INOUT i)
+    WHILE exceptionsize > 0 DO
+        VAR e: ExceptInfo := ExceptInfo()
+        e.start := get_uint16(self.obj, INOUT i)
+        e.end := get_uint16(self.obj, INOUT i)
+        e.excid := get_uint16(self.obj, INOUT i)
+        e.handler := get_uint16(self.obj, INOUT i)
+        self.exceptions.append(e)
+        DEC exceptionsize
+    END WHILE
 
-        VAR typesize: Number := get_uint16(self.obj, INOUT i)
-        WHILE typesize > 0 DO
-            VAR t: Type := Type()
-            t.name := get_uint16(self.obj, INOUT i)
-            t.descriptor := get_uint16(self.obj, INOUT i)
-            self.export_types.append(t)
-            DEC typesize
-        END WHILE
-
-        VAR constantsize: Number := get_uint16(self.obj, INOUT i)
-        WHILE constantsize > 0 DO
-            VAR c: Constant := Constant()
-            c.name := get_uint16(self.obj, INOUT i)
-            c.type := get_uint16(self.obj, INOUT i)
-            LET size: Number := get_uint16(self.obj, INOUT i)
-            IF (i+size > self.obj.size()) THEN
-                RAISE BytecodeException(info WITH "Corrupted constants in .neonx file.")
-            END IF
-            c.value := self.obj[i TO i+size]
-            i := i + size
-            self.export_constants.append(c)
-            DEC constantsize
-        END WHILE
-
-        VAR variablesize: Number := get_uint16(self.obj, INOUT i)
-        WHILE variablesize > 0 DO
-            VAR v: Variable := Variable()
-            v.name := get_uint16(self.obj, INOUT i)
-            v.type := get_uint16(self.obj, INOUT i)
-            v.index := get_uint16(self.obj, INOUT i)            
-            self.export_variables.append(v)
-            DEC variablesize
-        END WHILE
-
-        VAR functionsize: Number := get_uint16(self.obj, INOUT i)
-        WHILE functionsize > 0 DO
-            VAR f: Function := Function()
-            f.name := get_uint16(self.obj, INOUT i)
-            f.descriptor := get_uint16(self.obj, INOUT i)
-            f.entry := get_uint16(self.obj, INOUT i)            
-            self.export_functions.append(f)
-            DEC functionsize
-        END WHILE
-
-        VAR exceptionexportsize: Number := get_uint16(self.obj, INOUT i)
-        WHILE exceptionexportsize > 0 DO
-            VAR e: ExceptionExport := ExceptionExport()
-            e.name := get_uint16(self.obj, INOUT i)
-            self.export_exceptions.append(e)
-            DEC exceptionexportsize
-        END WHILE
-
-        VAR importsize: Number := get_uint16(self.obj, INOUT i)
-        WHILE importsize > 0 DO
-            VAR imp: Pair := Pair()
-            imp.first := get_uint16(self.obj, INOUT i)
-            IF (i+32 > self.obj.size()) THEN
-                RAISE BytecodeException(info WITH "Corrupted Import Table in neon excutable file.")
-            END IF
-            FOREACH s IN self.obj[i TO i+32] DO
-                imp.second.append(str(s))
-            END FOREACH
-            print("imp.second=\(imp.second)")
-            i := i + 32
-            self.imports.append(imp)
-            DEC importsize
-        END WHILE
-
-        functionsize := get_uint16(self.obj, INOUT i)
-        WHILE functionsize > 0 DO
-            VAR f: FunctionInfo := FunctionInfo()
-            f.name := get_uint16(self.obj, INOUT i)
-            f.entry := get_uint16(self.obj, INOUT i)
-            self.functions.append(f)
-            DEC functionsize
-        END WHILE
-        
-        VAR exceptionsize: Number := get_uint16(self.obj, INOUT i)
-        WHILE exceptionsize > 0 DO
-            VAR e: ExceptInfo := ExceptInfo()
-            e.start := get_uint16(self.obj, INOUT i)
-            e.end := get_uint16(self.obj, INOUT i)
-            e.excid := get_uint16(self.obj, INOUT i)
-            e.handler := get_uint16(self.obj, INOUT i)
-            self.exceptions.append(e)
-            DEC exceptionsize
-        END WHILE
-
-        self.code := self.obj[i TO LAST]
-    EXCEPTION BytecodeException DO
-        RAISE BytecodeException(info WITH CURRENT_EXCEPTION.info)
-        RETURN FALSE
-    END TRY
+    self.code := self.obj[i TO LAST]
 
     RETURN TRUE
 END FUNCTION
@@ -254,7 +249,7 @@ FUNCTION put_uint32(INOUT obj: Array<Number>, x: Number)
 END FUNCTION
 
 FUNCTION set_uint32(INOUT obj: Array<Number>, addr: Number, value: Number)
-    obj[addr TO addr+3]  := struct.packUInt32BE(value).toArray()
+    obj[addr TO addr+3] := struct.packUInt32BE(value).toArray()
 END FUNCTION
 
 FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number

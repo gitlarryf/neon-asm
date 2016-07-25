@@ -1,0 +1,19 @@
+.GlobalSize: 1
+.const: x 5
+
+PUSHN x
+CALLF sq
+CALLP str
+CALLP print
+RET
+
+.begin: sq
+    PUSHPG 0
+    STOREN
+    PUSHPG 0
+    LOADN
+    PUSHPG 0
+    LOADN
+    MULN
+    RET
+.end

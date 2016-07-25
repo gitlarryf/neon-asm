@@ -94,7 +94,8 @@ LET Tokens: Dictionary<Number> := {
 LET Directives: Dictionary<Number> := {
     ".GlobalSize":   1,     %| Sets the global variable size        |%
     ".const":        2,     %| Sets a value to an Identifier        |%
-    ".Global":       2,     %| Function Declration                  |%
+    ".begin":        3,     %| Declare Function                     |%
+    ".end":          4,     %| End function Declration              |%
 }
 
 LET source: String := sys.args[1]
@@ -148,11 +149,16 @@ TYPE JumpTable IS RECORD
     line: Number
 END RECORD
 
+TYPE FunctionData IS RECORD
+    name: String
+    info: FunctionInfo
+END RECORD
+
 LET outfn: String := makeOutputFilename(source)
 LET lines: Array<String> := file.readLines(source)
 VAR code: Bytecode.Bytecode := Bytecode.Bytecode()
 code.reset()
-VAR Functions: Dictionary<FunctionInfo> := {}
+VAR Functions: Dictionary<FunctionData> := {}
 VAR Constants: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
 VAR Fixups: Array<JumpTable> := []
@@ -162,7 +168,7 @@ FOREACH s IN lines INDEX i DO
     VAR line: String := ""
     VAR ln: String := string.trim(s)
 
-    IF s = "" OR s[FIRST] = ";" THEN % ignore blank, and commented out lines.
+    IF s = "" OR s[FIRST] = ";" OR string.trim(s) = "" THEN % ignore blank, and commented out lines.
         NEXT FOREACH
     END IF
 
@@ -181,6 +187,9 @@ FOREACH s IN lines INDEX i DO
     
     VAR ref: Number := 0
     LET words: Array<String> := string.split(string.trim(ln), " ")
+    IF words.size() <= 0 THEN
+        words.append(string.trim(ln))
+    END IF
     IF string.hasPrefix(words[0], ".") THEN
         LET directives: Array<String> := string.split(string.trim(ln), ":")
         IF directives[0] IN Directives THEN
@@ -198,12 +207,18 @@ FOREACH s IN lines INDEX i DO
                         sys.exit(1)
                     END IF
                     Constants[values[0]] := string.trim(values[1])
-                WHEN ".Global" DO
-                    VAR f: FunctionInfo := FunctionInfo()
-                    print("Adding function: \(string.trim(directives[1]))...")
-                    f.name := code.addString(string.trim(directives[1]))
-                    f.entry:= -1
-                    Functions[directives[1]] := f
+                WHEN ".begin" DO
+                    VAR f: FunctionData := FunctionData()
+                    LET name: String := string.trim(directives[1])
+                    IF name IN Functions THEN
+                        print("Function already declared. Error on line \(i).")
+                        sys.exit(1)
+                    END IF
+                    f.name := name
+                    f.info.name := code.addString(name)
+                    Functions[name] := f % Get the function added to the function array first.
+                    Labels[name] := code.getCurrentAddress()
+                    Functions[name].info.entry := Labels[name]
             END CASE
         END IF
         NEXT FOREACH
@@ -260,15 +275,6 @@ FOREACH s IN lines INDEX i DO
                 END IF
                 code.referenceAddress(ref)
                 line.append(" \(ref)")
-            WHEN OTHERS DO
-                IF words[0][LAST] = ":" THEN % Function Header
-                    print("Creating function...")
-                    LET func: String := words[0][FIRST TO LAST-1]
-                    IF func IN Functions THEN
-                        Labels[func] := code.getCurrentAddress()
-                        Functions[func].entry := Labels[func]
-                    END IF
-                END IF
         END CASE
     ELSE
         print("Invalid operand on line \(i): \(words[0])")
@@ -277,6 +283,12 @@ FOREACH s IN lines INDEX i DO
     print(line)
 END FOREACH
 
+IF Functions.size() > 0 THEN
+    print("Linking functions...")
+    FOREACH f IN Functions.keys() DO
+        code.functions.append(Functions[f].info)
+    END FOREACH
+END IF
 FOREACH f IN Fixups DO
     IF f.label IN Labels THEN
         code.fixupAddress(f.location, Labels[f.label])
