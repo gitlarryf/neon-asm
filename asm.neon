@@ -1,9 +1,16 @@
-IMPORT Bytecode
+IMPORT ByteCode
 IMPORT file
+IMPORT io
+IMPORT os
 IMPORT sys
 IMPORT string
 
-TYPE FunctionInfo IS Bytecode.FunctionInfo
+TYPE FunctionInfo IS ByteCode.FunctionInfo
+TYPE Bytecode IS ByteCode.Bytecode
+TYPE Pair IS ByteCode.Pair
+
+VAR code: Bytecode := Bytecode()
+code.reset()
 
 LET Tokens: Dictionary<Number> := {
     "ENTER":        0, 
@@ -96,6 +103,7 @@ LET Directives: Dictionary<Number> := {
     ".const":        2,     %| Sets a value to an Identifier        |%
     ".begin":        3,     %| Declare Function                     |%
     ".end":          4,     %| End function Declration              |%
+    ".import":       5,     %| Import a Neon module                 |%
 }
 
 LET source: String := sys.args[1]
@@ -104,8 +112,7 @@ FUNCTION makeOutputFilename(s: String): String
     VAR dir, fn: String := ""
     file.pathSplit(s, OUT dir, OUT fn)
     IF NOT string.hasSuffix(fn, ".neona") THEN
-        print("Not a valid neon assembly file.")
-        sys.exit(1)
+        error("Not a valid neon assembly file.")
     END IF
     RETURN file.pathJoin(dir, fn[FIRST TO LAST-6] & ".neonx")
 END FUNCTION
@@ -125,11 +132,11 @@ FUNCTION parseString(s: String): String
                     RETURN r
                 END IF
                 IF i >= s.length() THEN
-                    print("unterminated string constant")
+                    io.fprint(io.stderr, "unterminated string constant")
                     sys.exit(1)
                 END IF
                 IF c = "\n" THEN
-                    print("unterminated string constant")
+                    io.fprint(io.stderr, "unterminated string constant")
                     sys.exit(1)
                 END IF
                 r.append(c)
@@ -154,10 +161,70 @@ TYPE FunctionData IS RECORD
     info: FunctionInfo
 END RECORD
 
+FUNCTION PathSupport(source_path: String): Array<String>
+    VAR paths: Array<String> := []
+
+    IF source_path.length() > 0 THEN
+        paths.append(source_path)
+    END IF
+    paths.append("./")
+
+    VAR neonpath: String := os.getenv("NEONPATH")
+    IF neonpath.length() > 0 THEN
+        IF neonpath[LAST] = file.Separator THEN
+            neonpath := neonpath[FIRST TO LAST-1]
+        END IF
+        paths.append(neonpath)
+    END IF
+    
+    TRY
+        VAR inf: Array<String> := file.readLines(".neonpath")
+        FOREACH p IN inf DO
+            paths.append(p)
+        END FOREACH
+    EXCEPTION file.FileOpenException DO
+        RETURN paths
+    END TRY
+
+    RETURN paths
+END FUNCTION
+
+FUNCTION error(s: String, exit: Number DEFAULT 1)
+    io.fprint(io.stderr, s)
+    sys.exit(exit)
+END FUNCTION
+
+FUNCTION FindModule(name: String): String
+    VAR paths: Array<String> := PathSupport(os.getcwd())
+
+    FOREACH path IN paths DO
+        LET files: Array<String> := file.files(path)
+        FOREACH f IN files DO
+            IF name = f THEN
+                RETURN file.pathJoin(path, name)
+            END IF
+        END FOREACH
+    END FOREACH
+    error("Could not locate module \(name).")
+    RETURN ""
+END FUNCTION
+
+FUNCTION getModule(fn: String): Bytecode
+    VAR mod: Bytecode := Bytecode()
+    TRY
+        VAR bytes: Bytes := file.readBytes(FindModule(fn))
+        mod := mod.fromBytes(bytes)
+    EXCEPTION file.FileOpenException DO
+        error("Module \(fn) was not found.")
+    EXCEPTION ByteCode.BytecodeException DO
+        error("Error loading module \(fn).  Module is not valid Neon Bytecode.")
+    END TRY
+    RETURN mod
+END FUNCTION
+
 LET outfn: String := makeOutputFilename(source)
 LET lines: Array<String> := file.readLines(source)
-VAR code: Bytecode.Bytecode := Bytecode.Bytecode()
-code.reset()
+VAR Imports: Array<String> := []
 VAR Functions: Dictionary<FunctionData> := {}
 VAR Constants: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
@@ -178,8 +245,7 @@ FOREACH s IN lines INDEX i DO
 
     IF ln[0] = ":" THEN
         IF ln[1 TO LAST] IN Labels THEN
-            print("Duplicate label definition on line \(i).")
-            sys.exit(1)
+            error("Duplicate label definition on line \(i).", 1)
         END IF
         Labels[ln[1 TO LAST]] := code.getCurrentAddress()
         NEXT FOREACH
@@ -199,26 +265,33 @@ FOREACH s IN lines INDEX i DO
                 WHEN ".const" DO
                     LET values: Array<String> := string.split(string.trim(directives[1]), " ")
                     IF values.size() < 2 THEN
-                        print("Missing value:  Expected constant value; line \(i).")
-                        sys.exit(1)
+                        error("Missing value:  Expected constant value; line \(i).", 1)
                     END IF
                     IF values[0] IN Constants THEN
-                        print("Duplicate Identifier on line \(i): \(values[0])")
-                        sys.exit(1)
+                        error("Duplicate Identifier on line \(i): \(values[0])", 1)
                     END IF
                     Constants[values[0]] := string.trim(values[1])
                 WHEN ".begin" DO
                     VAR f: FunctionData := FunctionData()
                     LET name: String := string.trim(directives[1])
                     IF name IN Functions THEN
-                        print("Function already declared. Error on line \(i).")
-                        sys.exit(1)
+                        error("Function already declared. Error on line \(i).", 1)
                     END IF
                     f.name := name
                     f.info.name := code.addString(name)
                     Functions[name] := f % Get the function added to the function array first.
                     Labels[name] := code.getCurrentAddress()
                     Functions[name].info.entry := Labels[name]
+                WHEN ".import" DO
+                    IF string.trim(directives[1]) IN Imports THEN
+                        error("Duplicate import directive. \(i)", 1)
+                    END IF
+
+                    _ := FindModule(string.trim(directives[1] & ".neonx"))
+                    VAR p: Pair := Pair()
+                    p.first  := code.addString(string.trim(directives[1]))
+                    p.second := string.repeat("0", 32)
+                    code.imports.append(p)
             END CASE
         END IF
         NEXT FOREACH
@@ -238,14 +311,39 @@ FOREACH s IN lines INDEX i DO
                 END IF
                 line.append(" \(ref)")
                 code.referenceString(ref)
-            WHEN "CALLP" DO                                % call
-                ref := code.addString(operand)
-                line.append(" \(ref)")
+            WHEN "CALLP", "CALLMF" DO                                         % call predefined function, call module function
+                VAR dest: String := ""
+                VAR module: String := ""
+                IF string.find(operand, ".") > 0 THEN
+                    % Attempting to call a function in an imported module.
+                    module := operand[FIRST TO string.find(operand, ".")-1]
+                    IF module IN Imports THEN
+                        ref := code.addString(module)
+                        IF words[0] = "CALLMF" THEN
+                            dest := module % Setup Neon module call
+                        END IF
+                    ELSE
+                        error("Unknown module, or module not imported.  Line \(i)")
+                    END IF
+                ELSE
+                    % Attempting to call a predefined function.
+                    dest := operand
+                END IF
+                ref := code.addString(dest)
+                line.append(" \(dest) : (\(ref))")
                 code.referenceString(ref)
+                IF words[0] = "CALLMF" THEN
+                    LET bc: Bytecode := getModule("\(module).neonx")
+                    FOREACH bcf IN bc.functions DO
+                        IF bc.strtable[bcf.name] = operand[string.find(operand, ".")+1 TO LAST] THEN
+                            code.referenceAddress(bcf.entry)
+                            EXIT FOREACH
+                        END IF
+                    END FOREACH
+                END IF
             WHEN "PUSHS" DO                                         % push string immediate
                 IF operand[0] # "\"" THEN
-                    print("Expected \".")
-                    sys.exit(1)
+                    error("Expected \".")
                 END IF
                 ref := code.addString(parseString(operand))
                 line.append(" \(ref)")
@@ -277,8 +375,7 @@ FOREACH s IN lines INDEX i DO
                 line.append(" \(ref)")
         END CASE
     ELSE
-        print("Invalid operand on line \(i): \(words[0])")
-        sys.exit(1) % Invalid operand.
+        error("Invalid operand on line \(i): \(words[0])")
     END IF
     print(line)
 END FOREACH
@@ -293,7 +390,7 @@ FOREACH f IN Fixups DO
     IF f.label IN Labels THEN
         code.fixupAddress(f.location, Labels[f.label])
     ELSE
-        print("Undefined label: \(f.label) on line \(f.line).")
+        io.fprint(io.stderr, "Undefined label: \(f.label) on line \(f.line).")
         sys.exit(1)
     END IF
 END FOREACH

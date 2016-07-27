@@ -1,0 +1,7 @@
+.import: string
+
+PUSHS "*"
+PUSHN 5
+CALLMF string.repeat
+CALLP print
+RET

@@ -1,39 +1,69 @@
 IMPORT file
+IMPORT process
 IMPORT os
 IMPORT string
 IMPORT sys
 
-LET path: String := os.getcwd() & file.Separator & "neon-asm/t/"
+VAR PerformErrorTests: Boolean := FALSE     % If TRUE, only run the error tests under t/errors/
 LET asmblr: String := os.getcwd() & file.Separator & "neon-asm/asm.neon"
-
+VAR path: String := os.getcwd() & file.Separator & "neon-asm/t/"
+VAR tests: Number := 0
 VAR files: Array<String> := file.files(path)
-print("Cleaning up before testing...")
-FOREACH bin IN files DO
-    IF string.hasSuffix(bin, ".neonx") THEN
-        file.delete(bin)
-    END IF
-END FOREACH
 
-FOREACH test IN files DO
-    IF string.hasSuffix(test, ".neona") THEN
-        print("Compiling \(test)...")
-        LET neonx: Number := os.system(os.getcwd() & file.Separator & "bin/neon.exe " & asmblr & " " & path & test)
-        IF neonx # 0 THEN
-            print("\n\n*** Test \(test) failed.")
-            sys.exit(2)
-        END IF
-        _ := os.system(os.getcwd() & file.Separator & "bin/neonx.exe " & path & makeOutputFilename(test) & " > " & path & "tmp/" & makeOutputFilename(test) & ".out")
-        LET data: Array<String> := file.readLines(path & makeOutputFilename(test) & ".expected")
-        LET actl: Array<String> := file.readLines(path & "tmp/" & makeOutputFilename(test) & ".out")
-        IF data # actl THEN
-            print("*** Test \(test) failed.\n*** Expected: \(data) Got: \(actl)")
-            print("\n\nTests failed.")
-            sys.exit(1)
-        END IF
-    END IF
-END FOREACH
+IF "-e" IN sys.args THEN
+    PerformErrorTests := TRUE
+END IF
 
-print("All tests passed!")
+FUNCTION performTests(testFiles: Array<String>): Boolean
+    FOREACH test IN testFiles DO
+        IF string.hasSuffix(test, ".neona") THEN
+            print("Compiling \(test)...")
+            LET neonx: Number := os.system(os.getcwd() & file.Separator & "bin/neon.exe " & asmblr & " " & path & test)
+            CHECK neonx = 0 ELSE
+                print("\n\n*** Test \(test) failed.")
+                sys.exit(2)
+                RETURN FALSE
+            END CHECK
+            _ := os.system(os.getcwd() & file.Separator & "bin/neonx.exe " & path & makeOutputFilename(test) & " > " & path & "tmp/" & makeOutputFilename(test) & ".out")
+            LET data: Array<String> := file.readLines(path & makeOutputFilename(test) & ".expected")
+            LET actl: Array<String> := file.readLines(path & "tmp/" & makeOutputFilename(test) & ".out")
+            CHECK data = actl ELSE
+                print("*** Test \(test) failed.\n*** Expected: \(data) Got: \(actl)")
+                print("\n\nTests failed.")
+                sys.exit(1)
+                RETURN FALSE
+            END CHECK
+            INC tests
+        END IF
+    END FOREACH
+    RETURN TRUE
+END FUNCTION
+
+FUNCTION performErrorValidations(testFiles: Array<String>): Boolean
+    FOREACH test IN testFiles DO
+        IF string.hasSuffix(test, ".neona") THEN
+            print("Compiling \(test)...")
+            VAR stderr: Bytes
+            LET neonx: Number := process.call(os.getcwd() & file.Separator & "bin/neon.exe " & asmblr & " " & path & test, OUT _, OUT stderr)
+            IF neonx = 0 THEN
+                print("\n\n*** Error Validation Test: \(test) failed.")
+                sys.exit(2)
+            END IF
+            IF stderr.decodeToString() # "" THEN 
+                % Error data was present on Stderr, so it DID in fact error out.
+                LET expected: Array<String> := file.readLines(path & test & ".expected")
+                LET data: Array<String> := string.splitLines(stderr.decodeToString())
+                IF data # expected THEN
+                    print("*** Test \(test) failed.\n*** Expected: \(data) Got: \(expected)")
+                    print("\n\nTests failed.")
+                    sys.exit(1)
+                END IF
+                INC tests
+            END IF
+        END IF
+    END FOREACH
+    RETURN TRUE
+END FUNCTION
 
 FUNCTION makeOutputFilename(s: String): String
     VAR dir, fn: String := ""
@@ -44,3 +74,35 @@ FUNCTION makeOutputFilename(s: String): String
     END IF
     RETURN file.pathJoin(dir, fn[FIRST TO LAST-6] & ".neonx")
 END FUNCTION
+
+BEGIN MAIN
+
+    print("Cleaning up before testing...")
+    FOREACH bin IN files DO
+        IF string.hasSuffix(bin, ".neonx") THEN
+            file.delete(bin)
+        END IF
+    END FOREACH
+
+    print("Performing tests in \(path)...")
+    IF PerformErrorTests THEN
+        path.append("errors/")
+        files := file.files(path)
+        IF performErrorValidations(files) THEN
+            print("All \(tests) tests passed!")
+            sys.exit(0)
+        END IF
+        sys.exit(0)
+    END IF
+    
+    IF performTests(files) THEN
+        path.append("errors/")
+        print("Performing error validation tests in \(path)...")
+        files := file.files(path)
+        IF performErrorValidations(files) THEN
+            print("All \(tests) tests passed!")
+            sys.exit(0)
+        END IF
+    END IF
+
+END MAIN

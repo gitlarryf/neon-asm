@@ -119,12 +119,12 @@ FUNCTION Bytecode.reset(INOUT self: Bytecode)
     self := new
 END FUNCTION
  
-FUNCTION Bytecode.fromBytes(self: Bytecode, bytes: Bytes): Bytecode
-    VAR r: Bytecode := Bytecode()
-    IF r.load(bytes.toArray()) THEN
-        RETURN r
+FUNCTION Bytecode.fromBytes(INOUT self: Bytecode, bytes: Bytes): Bytecode
+    %VAR r: Bytecode := Bytecode()
+    IF self.load(bytes.toArray()) THEN
+        RETURN self
     END IF
-    RETURN Bytecode()
+    RETURN self
 END FUNCTION
 
 FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
@@ -138,30 +138,31 @@ FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
         self.source_hash[x] := self.obj[i+x]
     END FOR
     i := i + 32
-    self.global_size := get_uint16(self.obj, INOUT i)
 
-    LET strtablesize: Number := get_uint32(self.obj, INOUT i)
+    self.global_size := get_uint16(self.obj[i TO i+1], INOUT i)
+    
+    LET strtablesize: Number := get_uint32(self.obj[i TO i+3], INOUT i)
     IF (i+strtablesize > self.obj.size()) THEN
         RAISE BytecodeException(info WITH "Corrupted String Table in .neonx file.")
     END IF
     self.strtable := getstrtable(i, i + strtablesize, self.obj)
     i := i + strtablesize
 
-    VAR typesize: Number := get_uint16(self.obj, INOUT i)
+    VAR typesize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE typesize > 0 DO
         VAR t: Type := Type()
-        t.name := get_uint16(self.obj, INOUT i)
-        t.descriptor := get_uint16(self.obj, INOUT i)
+        t.name := get_uint16(self.obj[i TO i+1], INOUT i)
+        t.descriptor := get_uint16(self.obj[i TO i+1], INOUT i)
         self.export_types.append(t)
         DEC typesize
     END WHILE
 
-    VAR constantsize: Number := get_uint16(self.obj, INOUT i)
+    VAR constantsize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE constantsize > 0 DO
         VAR c: Constant := Constant()
-        c.name := get_uint16(self.obj, INOUT i)
-        c.type := get_uint16(self.obj, INOUT i)
-        LET size: Number := get_uint16(self.obj, INOUT i)
+        c.name := get_uint16(self.obj[i TO i+1], INOUT i)
+        c.type := get_uint16(self.obj[i TO i+1], INOUT i)
+        LET size: Number := get_uint16(self.obj[i TO i+1], INOUT i)
         IF (i+size > self.obj.size()) THEN
             RAISE BytecodeException(info WITH "Corrupted constants in .neonx file.")
         END IF
@@ -171,38 +172,38 @@ FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
         DEC constantsize
     END WHILE
 
-    VAR variablesize: Number := get_uint16(self.obj, INOUT i)
+    VAR variablesize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE variablesize > 0 DO
         VAR v: Variable := Variable()
-        v.name := get_uint16(self.obj, INOUT i)
-        v.type := get_uint16(self.obj, INOUT i)
-        v.index := get_uint16(self.obj, INOUT i)            
+        v.name := get_uint16(self.obj[i TO i+1], INOUT i)
+        v.type := get_uint16(self.obj[i TO i+1], INOUT i)
+        v.index := get_uint16(self.obj[i TO i+1], INOUT i)            
         self.export_variables.append(v)
         DEC variablesize
     END WHILE
 
-    VAR functionsize: Number := get_uint16(self.obj, INOUT i)
+    VAR functionsize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE functionsize > 0 DO
         VAR f: Function := Function()
-        f.name := get_uint16(self.obj, INOUT i)
-        f.descriptor := get_uint16(self.obj, INOUT i)
-        f.entry := get_uint16(self.obj, INOUT i)            
+        f.name := get_uint16(self.obj[i TO i+1], INOUT i)
+        f.descriptor := get_uint16(self.obj[i TO i+1], INOUT i)
+        f.entry := get_uint16(self.obj[i TO i+1], INOUT i)            
         self.export_functions.append(f)
         DEC functionsize
     END WHILE
 
-    VAR exceptionexportsize: Number := get_uint16(self.obj, INOUT i)
+    VAR exceptionexportsize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE exceptionexportsize > 0 DO
         VAR e: ExceptionExport := ExceptionExport()
-        e.name := get_uint16(self.obj, INOUT i)
+        e.name := get_uint16(self.obj[i TO i+1], INOUT i)
         self.export_exceptions.append(e)
         DEC exceptionexportsize
     END WHILE
 
-    VAR importsize: Number := get_uint16(self.obj, INOUT i)
+    VAR importsize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE importsize > 0 DO
         VAR imp: Pair := Pair()
-        imp.first := get_uint16(self.obj, INOUT i)
+        imp.first := get_uint16(self.obj[i TO i+1], INOUT i)
         IF (i+32 > self.obj.size()) THEN
             RAISE BytecodeException(info WITH "Corrupted Import Table in neon excutable file.")
         END IF
@@ -215,22 +216,22 @@ FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
         DEC importsize
     END WHILE
 
-    functionsize := get_uint16(self.obj, INOUT i)
+    functionsize := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE functionsize > 0 DO
         VAR f: FunctionInfo := FunctionInfo()
-        f.name := get_uint16(self.obj, INOUT i)
-        f.entry := get_uint16(self.obj, INOUT i)
+        f.name := get_uint16(self.obj[i TO i+1], INOUT i)
+        f.entry := get_uint16(self.obj[i TO i+1], INOUT i)
         self.functions.append(f)
         DEC functionsize
     END WHILE
     
-    VAR exceptionsize: Number := get_uint16(self.obj, INOUT i)
+    VAR exceptionsize: Number := get_uint16(self.obj[i TO i+1], INOUT i)
     WHILE exceptionsize > 0 DO
         VAR e: ExceptInfo := ExceptInfo()
-        e.start := get_uint16(self.obj, INOUT i)
-        e.end := get_uint16(self.obj, INOUT i)
-        e.excid := get_uint16(self.obj, INOUT i)
-        e.handler := get_uint16(self.obj, INOUT i)
+        e.start := get_uint16(self.obj[i TO i+1], INOUT i)
+        e.end := get_uint16(self.obj[i TO i+1], INOUT i)
+        e.excid := get_uint16(self.obj[i TO i+1], INOUT i)
+        e.handler := get_uint16(self.obj[i TO i+1], INOUT i)
         self.exceptions.append(e)
         DEC exceptionsize
     END WHILE
@@ -253,13 +254,13 @@ FUNCTION set_uint32(INOUT obj: Array<Number>, addr: Number, value: Number)
 END FUNCTION
 
 FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number
-    LET r: Number := struct.unpackUInt16BE(obj[i TO LAST].toBytes())
+    LET r: Number := struct.unpackUInt16BE(obj.toBytes())
     i := i + 2
     RETURN r
 END FUNCTION
 
 FUNCTION get_uint32(IN obj: Array<Number>, INOUT i: Number): Number
-    LET r: Number := struct.unpackUInt32BE(obj[i TO LAST].toBytes())
+    LET r: Number := struct.unpackUInt32BE(obj.toBytes())
     i := i + 4
     RETURN r
 END FUNCTION
@@ -270,7 +271,7 @@ FUNCTION getstrtable(start, end: Number, obj: Array<Number>): Array<String>
     s := start
     e := end
     WHILE s # e DO
-        LET len: Number := get_uint32(obj[s TO LAST], INOUT s)
+        LET len: Number := get_uint32(obj[s TO s+3], INOUT s)
         VAR strent: String := ""
         FOR x := s TO s+len-1 DO
             strent.append(chr(obj[x]))
@@ -279,6 +280,15 @@ FUNCTION getstrtable(start, end: Number, obj: Array<Number>): Array<String>
         r.append(strent)
     END WHILE
     RETURN r
+END FUNCTION
+
+FUNCTION Bytecode.getStringIndex(INOUT self: Bytecode, s: String): Number
+    FOREACH st IN self.strtable INDEX i DO
+        IF st = s THEN
+            RETURN i
+        END IF
+    END FOREACH
+    RETURN -1
 END FUNCTION
 
 FUNCTION Bytecode.addString(INOUT self: Bytecode, s: String): Number
