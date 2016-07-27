@@ -1,0 +1,6 @@
+.import: string
+
+PUSHS "Hello, World!"
+CALLP string$upper
+CALLP print
+RET

@@ -96,6 +96,7 @@ LET Directives: Dictionary<Number> := {
     ".const":        2,     %| Sets a value to an Identifier        |%
     ".begin":        3,     %| Declare Function                     |%
     ".end":          4,     %| End function Declration              |%
+    ".import":       5,     %| Import a Neon module                 |%
 }
 
 LET source: String := sys.args[1]
@@ -158,6 +159,7 @@ LET outfn: String := makeOutputFilename(source)
 LET lines: Array<String> := file.readLines(source)
 VAR code: Bytecode.Bytecode := Bytecode.Bytecode()
 code.reset()
+VAR Imports: Array<String> := []
 VAR Functions: Dictionary<FunctionData> := {}
 VAR Constants: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
@@ -219,6 +221,8 @@ FOREACH s IN lines INDEX i DO
                     Functions[name] := f % Get the function added to the function array first.
                     Labels[name] := code.getCurrentAddress()
                     Functions[name].info.entry := Labels[name]
+                WHEN ".import" DO
+                    Imports.append(string.trim(directives[1]))
             END CASE
         END IF
         NEXT FOREACH
@@ -238,9 +242,22 @@ FOREACH s IN lines INDEX i DO
                 END IF
                 line.append(" \(ref)")
                 code.referenceString(ref)
-            WHEN "CALLP" DO                                % call
-                ref := code.addString(operand)
-                line.append(" \(ref)")
+            WHEN "CALLP" DO                                         % call predefined function
+                VAR dest: String := ""
+                IF string.find(operand, ".") > 0 THEN
+                    % Attempting to call a function in an imported module.
+                    VAR module: String := operand[FIRST TO string.find(operand, ".")]
+                    IF module IN Imports THEN
+                        dest := module & "$" & operand[string.find(operand, ".")+1 TO LAST] % Setup Neon module call
+                    ELSE
+                        print("Name not found: \(module) on line \(i)")
+                        sys.exit(1)
+                    END IF
+                ELSE
+                    dest := operand
+                END IF
+                ref := code.addString(dest)
+                line.append(" \(dest) : (\(ref))")
                 code.referenceString(ref)
             WHEN "PUSHS" DO                                         % push string immediate
                 IF operand[0] # "\"" THEN
