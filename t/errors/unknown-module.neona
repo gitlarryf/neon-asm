@@ -1,0 +1,6 @@
+
+PUSHN 5
+PUSHS "*"
+CALLMF string.repeat
+CALLP print
+RET

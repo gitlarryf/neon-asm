@@ -1,0 +1,13 @@
+
+PUSHS "Hello, World!"
+CALLF output
+RET
+
+:output
+CALLP print
+RET
+
+:output
+CALLP str
+CALLP print
+RET
