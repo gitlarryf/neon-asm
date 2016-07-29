@@ -286,8 +286,10 @@ FOREACH s IN lines INDEX i DO
                     IF string.trim(directives[1]) IN Imports THEN
                         error("Duplicate import directive. \(i)", 1)
                     END IF
+                    
+                    Imports.append(string.trim(directives[1]))
+                    _ := FindModule(Imports[LAST] & ".neonx")
 
-                    _ := FindModule(string.trim(directives[1] & ".neonx"))
                     VAR p: Pair := Pair()
                     p.first  := code.addString(string.trim(directives[1]))
                     p.second := string.repeat("0", 32)
