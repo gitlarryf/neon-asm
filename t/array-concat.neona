@@ -1,0 +1,22 @@
+; aray-concat.neona - This test constructs two arrays, and then 
+; concatinates them into one, then prints it out to the console.
+.GlobalSize: 2
+
+PUSHN 2
+PUSHN 1
+CONSA 2
+PUSHPG 1
+STOREA
+PUSHN 4
+PUSHN 3
+CONSA 2
+PUSHPG 2
+STOREA
+PUSHPG 1
+LOADA
+PUSHPG 2
+LOADA
+CALLP array__concat
+CALLP array__toString__number
+CALLP print
+RET

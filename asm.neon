@@ -350,7 +350,7 @@ FOREACH s IN lines INDEX i DO
                 ref := code.addString(parseString(operand))
                 line.append(" \(ref)")
                 code.referenceString(ref)
-            WHEN "PUSHPG" DO                                        % push pointer to global
+            WHEN "PUSHPG", "CONSA" DO                               % push pointer to global, Construct Array
                 IF operand IN Constants THEN
                     ref := num(Constants[operand])
                 ELSE
