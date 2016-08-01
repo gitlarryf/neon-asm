@@ -1,0 +1,45 @@
+; record-init.neona - This test constructs a record, and initializes it, printing the values of the
+; members.
+.GlobalSize: 2
+
+.const: p 1
+PUSHN 2
+PUSHN 1
+CONSA 2
+PUSHPG p
+STOREA
+PUSHPG p
+PUSHN 0
+INDEXAW
+LOADN
+CALLF print_num
+
+PUSHPG 1
+PUSHN 1
+INDEXAW
+LOADN
+CALLF print_num
+
+.const: points 2
+PUSHN 4
+PUSHN 3
+CONSA 2 ; Construct last Point Record, and push it on the stack.
+PUSHN 2
+PUSHN 1
+CONSA 2 ; Construct first Point Reocrd, and push it on the stack.
+CONSA 2 ; Construct the points variable out of the two Point REOCRDs on the stack.
+PUSHPG points
+STOREA
+PUSHPG points
+PUSHN 1
+INDEXAR ; Pull the second member out of the Point RECORD
+PUSHN 1
+INDEXAW ; Pull the second element out of the points variable. [1].y
+LOADN
+CALLF print_num
+RET
+  
+:print_num
+    CALLP number__toString
+    CALLP print
+    RET
