@@ -6,6 +6,7 @@ IMPORT sys
 IMPORT string
 
 TYPE FunctionInfo IS ByteCode.FunctionInfo
+TYPE Exception IS ByteCode.ExceptInfo
 TYPE Bytecode IS ByteCode.Bytecode
 TYPE Pair IS ByteCode.Pair
 
@@ -104,6 +105,10 @@ LET Directives: Dictionary<Number> := {
     ".begin":        3,     %| Declare Function                     |%
     ".end":          4,     %| End function Declration              |%
     ".import":       5,     %| Import a Neon module                 |%
+    ".exception":    6,     %| Declare an exception                 |%
+    ".try":          7,     %| Begin try block                      |%
+    ".catch":        8,     %| Catch a thrown exception             |%
+    ".finish":       9,     %| finish catch handler                 |%
 }
 
 LET source: String := sys.args[1]
@@ -132,12 +137,10 @@ FUNCTION parseString(s: String): String
                     RETURN r
                 END IF
                 IF i >= s.length() THEN
-                    io.fprint(io.stderr, "unterminated string constant")
-                    sys.exit(1)
+                    error("unterminated string constant", 1)
                 END IF
                 IF c = "\n" THEN
-                    io.fprint(io.stderr, "unterminated string constant")
-                    sys.exit(1)
+                    error("unterminated string constant", 1)
                 END IF
                 r.append(c)
             END WHILE
@@ -205,7 +208,7 @@ FUNCTION FindModule(name: String): String
             END IF
         END FOREACH
     END FOREACH
-    error("Could not locate module \(name).")
+    error("Could not locate module \(name).", 2)
     RETURN ""
 END FUNCTION
 
@@ -215,9 +218,9 @@ FUNCTION getModule(fn: String): Bytecode
         VAR bytes: Bytes := file.readBytes(FindModule(fn))
         mod := mod.fromBytes(bytes)
     EXCEPTION file.FileOpenException DO
-        error("Module \(fn) was not found.")
+        error("Module \(fn) was not found.", CURRENT_EXCEPTION.code)
     EXCEPTION ByteCode.BytecodeException DO
-        error("Error loading module \(fn).  Module is not valid Neon Bytecode.")
+        error("Error loading module \(fn).  Module is not valid Neon Bytecode.", 3)
     END TRY
     RETURN mod
 END FUNCTION
@@ -229,6 +232,9 @@ VAR Functions: Dictionary<FunctionData> := {}
 VAR Constants: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
 VAR Fixups: Array<JumpTable> := []
+VAR ExceptionHandlers: Dictionary<Exception> := {}
+VAR CurrentException: Array<String> := []
+VAR Exceptions: Array<String> := []
 VAR numLines: Number := lines.size()
 
 FOREACH s IN lines INDEX i DO
@@ -294,6 +300,39 @@ FOREACH s IN lines INDEX i DO
                     p.first  := code.addString(string.trim(directives[1]))
                     p.second := string.repeat("0", 32)
                     code.imports.append(p)
+                WHEN ".exception" DO
+                    IF string.trim(directives[1]) IN Exceptions THEN
+                        error("Duplicate exception declared.  Line: \(i)", 1)
+                    END IF
+                    
+                    Exceptions.append(string.trim(directives[1]))
+                WHEN ".try" DO
+                    CurrentException.append(string.trim(directives[1]))
+                    IF CurrentException[LAST] IN ExceptionHandlers THEN
+                        error("Duplicate structured exception handler declared.  Each block must have a unique name.  Line: \(i)", 1)
+                    END IF
+
+                    VAR e: Exception := Exception()
+                    e.start := code.getCurrentAddress()
+                    ExceptionHandlers[CurrentException[LAST]] := e
+                    
+                WHEN ".catch" DO
+                    LET excp: String := string.trim(directives[1])
+                    
+                    IF excp IN Exceptions THEN
+%|                         code.code.append(Tokens["JUMP"])
+                        code.code.appendValue(0)
+ |%                        
+                        ExceptionHandlers[CurrentException[LAST]].end := code.getCurrentAddress()
+                        ExceptionHandlers[CurrentException[LAST]].handler := code.getCurrentAddress()
+                        ExceptionHandlers[CurrentException[LAST]].excid := code.addString(excp)
+                        code.exceptions.append(ExceptionHandlers[CurrentException[LAST]])
+                    ELSE
+                        error("Exception \"\(excp)\" not declared.  Line(i).", 1)
+                    END IF
+                WHEN ".finish" DO
+                    CurrentException := CurrentException[FIRST TO LAST-1]
+                    %Labels["\(CurrentException[LAST])-Handler"] := code.getCurrentAddress()
             END CASE
         END IF
         NEXT FOREACH
@@ -362,6 +401,17 @@ FOREACH s IN lines INDEX i DO
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
             WHEN "LOADN" DO                                         % load number
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
+            WHEN "EXCEPT" DO
+                IF operand[0] # "\"" THEN
+                    error("Expected \".")
+                END IF
+                IF parseString(operand) IN Exceptions THEN
+                    ref := code.addString(parseString(operand))
+                ELSE
+                    error("Exception not declared. Line\(i).")
+                END IF
+                line.append(" \(ref)")
+                code.referenceString(ref)
             WHEN "JUMP", "JF", "CALLF" DO
                 IF operand IN Labels THEN
                     ref := Labels[operand]
@@ -396,6 +446,9 @@ FOREACH f IN Fixups DO
         sys.exit(1)
     END IF
 END FOREACH
+IF CurrentException.size() > 0 THEN
+    error("Missing .finish operand for exception \(CurrentException[LAST]).", 1)
+END IF
 print("Compiled \(numLines) lines.")
 
 code.toFile(outfn)

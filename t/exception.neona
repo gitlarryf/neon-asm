@@ -1,0 +1,13 @@
+.exception: PrinterOnFire
+
+.try: printer
+    CONSA 0
+    EXCEPT "PrinterOnFire"
+.catch: PrinterOnFire
+    PUSHS "conflagration"
+    CALLP print
+    CLREXC
+.finish: printer
+RET
+
+
