@@ -1,0 +1,54 @@
+.GlobalSize: 2
+.const: x 1
+.const: y 2
+
+PUSHPG x
+RESETC
+PUSHPG y
+RESETC
+
+PUSHN 5
+PUSHPG x
+STOREN
+
+PUSHN 10
+PUSHPG y
+STOREN
+
+CALLF sq
+CALLP str
+CALLP print
+
+PUSHPG y
+LOADN
+CALLP str
+CALLP print
+RET
+
+.begin: sq
+    ENTER 1,2
+.local: t 0
+.local: z 1
+    PUSHPL t
+    RESETC
+
+    PUSHPL z
+    RESETC
+
+    PUSHPG x
+    LOADN
+    PUSHPG x
+    LOADN
+    MULN
+    PUSHPL t
+    STOREN
+
+    PUSHN 999
+    PUSHPL z
+    STOREN
+
+    PUSHPL t
+    LOADN
+    LEAVE
+    RET
+

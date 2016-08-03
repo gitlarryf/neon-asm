@@ -109,6 +109,7 @@ LET Directives: Dictionary<Number> := {
     ".try":          7,     %| Begin try block                      |%
     ".catch":        8,     %| Catch a thrown exception             |%
     ".finish":       9,     %| finish catch handler                 |%
+    ".local":       10,     %| Create a local variable              |%
 }
 
 LET source: String := sys.args[1]
@@ -230,6 +231,7 @@ LET lines: Array<String> := file.readLines(source)
 VAR Imports: Array<String> := []
 VAR Functions: Dictionary<FunctionData> := {}
 VAR Constants: Dictionary<String> := {}
+VAR Locals: Dictionary<String> := {}
 VAR Labels: Dictionary<Number> := {}
 VAR Fixups: Array<JumpTable> := []
 VAR ExceptionHandlers: Dictionary<Exception> := {}
@@ -268,15 +270,22 @@ FOREACH s IN lines INDEX i DO
             CASE directives[0]
                 WHEN ".GlobalSize" DO
                     code.global_size := code.global_size + num(string.trim(directives[1]))
-                WHEN ".const" DO
+                WHEN ".const", ".local" DO
                     LET values: Array<String> := string.split(string.trim(directives[1]), " ")
                     IF values.size() < 2 THEN
-                        error("Missing value:  Expected constant value; line \(i).", 1)
+                        error("Missing value:  Expected value; line \(i).", 1)
                     END IF
-                    IF values[0] IN Constants THEN
-                        error("Duplicate Identifier on line \(i): \(values[0])", 1)
+                    IF directives[0] = ".const" THEN
+                        IF values[0] IN Constants THEN
+                            error("Duplicate inentifier \"(\(values[0])\" on line \(i)", 1)
+                        END IF
+                        Constants[values[0]] := string.trim(values[1])
+                    ELSE
+                        IF values[0] IN Locals THEN
+                            error("Duplicate inentifier \"(\(values[0])\" on line \(i)", 1)
+                        END IF
+                        Locals[values[0]] := string.trim(values[1])
                     END IF
-                    Constants[values[0]] := string.trim(values[1])
                 WHEN ".begin" DO
                     VAR f: FunctionData := FunctionData()
                     LET name: String := string.trim(directives[1])
@@ -292,7 +301,7 @@ FOREACH s IN lines INDEX i DO
                     IF string.trim(directives[1]) IN Imports THEN
                         error("Duplicate import directive. \(i)", 1)
                     END IF
-                    
+
                     Imports.append(string.trim(directives[1]))
                     _ := FindModule(Imports[LAST] & ".neonx")
 
@@ -304,7 +313,7 @@ FOREACH s IN lines INDEX i DO
                     IF string.trim(directives[1]) IN Exceptions THEN
                         error("Duplicate exception declared.  Line: \(i)", 1)
                     END IF
-                    
+
                     Exceptions.append(string.trim(directives[1]))
                 WHEN ".try" DO
                     CurrentException.append(string.trim(directives[1]))
@@ -315,14 +324,10 @@ FOREACH s IN lines INDEX i DO
                     VAR e: Exception := Exception()
                     e.start := code.getCurrentAddress()
                     ExceptionHandlers[CurrentException[LAST]] := e
-                    
                 WHEN ".catch" DO
                     LET excp: String := string.trim(directives[1])
                     
                     IF excp IN Exceptions THEN
-%|                         code.code.append(Tokens["JUMP"])
-                        code.code.appendValue(0)
- |%                        
                         ExceptionHandlers[CurrentException[LAST]].end := code.getCurrentAddress()
                         ExceptionHandlers[CurrentException[LAST]].handler := code.getCurrentAddress()
                         ExceptionHandlers[CurrentException[LAST]].excid := code.addString(excp)
@@ -332,7 +337,6 @@ FOREACH s IN lines INDEX i DO
                     END IF
                 WHEN ".finish" DO
                     CurrentException := CurrentException[FIRST TO LAST-1]
-                    %Labels["\(CurrentException[LAST])-Handler"] := code.getCurrentAddress()
             END CASE
         END IF
         NEXT FOREACH
@@ -348,6 +352,9 @@ FOREACH s IN lines INDEX i DO
                 IF operand IN Constants THEN
                     ref := code.addString(Constants[operand])
                 ELSE
+                    IF operand IN Locals THEN
+                        ref := num(Locals[operand])
+                    END IF
                     ref := code.addString(operand)
                 END IF
                 line.append(" \(ref)")
@@ -395,12 +402,30 @@ FOREACH s IN lines INDEX i DO
                 ELSE
                     ref := num(operand)
                 END IF
+                ASSERT ref <= 0xFFFFFFFF
+                line.append(" \(ref)")
+                code.referenceVariable(ref)
+             WHEN "PUSHPL" DO
+                IF operand IN Locals THEN
+                    ref := num(Locals[operand])
+                ELSE
+                    ref := num(operand)
+                END IF
+                ASSERT ref <= 0xFFFFFFFF
                 line.append(" \(ref)")
                 code.referenceVariable(ref)
             WHEN "STOREN" DO                                        % store number
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
             WHEN "LOADN" DO                                         % load number
                 line.append("") % TODO: print the variable name, or imediate value if there is one.
+            WHEN "ENTER" DO
+                VAR frames: Array<String> := string.split(ln[words[0].length() + 1 TO LAST], ",")
+                IF frames.size() # 2 THEN
+                    error("Incorrect operands for opcode: \(words[0]) line \(i).", 1)
+                END IF
+                code.referenceAddress(num(frames[0]))
+                code.referenceAddress(num(frames[1]))
+                line.append(" \(frames[0]) , \(frames[1])")
             WHEN "EXCEPT" DO
                 IF operand[0] # "\"" THEN
                     error("Expected \".")
