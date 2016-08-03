@@ -277,12 +277,12 @@ FOREACH s IN lines INDEX i DO
                     END IF
                     IF directives[0] = ".const" THEN
                         IF values[0] IN Constants THEN
-                            error("Duplicate inentifier \"(\(values[0])\" on line \(i)", 1)
+                            error("Duplicate inentifier \"\(values[0])\" on line \(i)", 1)
                         END IF
                         Constants[values[0]] := string.trim(values[1])
                     ELSE
                         IF values[0] IN Locals THEN
-                            error("Duplicate inentifier \"(\(values[0])\" on line \(i)", 1)
+                            error("Duplicate inentifier \"\(values[0])\" on line \(i)", 1)
                         END IF
                         Locals[values[0]] := string.trim(values[1])
                     END IF
@@ -405,7 +405,7 @@ FOREACH s IN lines INDEX i DO
                 ASSERT ref <= 0xFFFFFFFF
                 line.append(" \(ref)")
                 code.referenceVariable(ref)
-             WHEN "PUSHPL" DO
+            WHEN "PUSHPL" DO
                 IF operand IN Locals THEN
                     ref := num(Locals[operand])
                 ELSE
@@ -450,6 +450,8 @@ FOREACH s IN lines INDEX i DO
                 END IF
                 code.referenceAddress(ref)
                 line.append(" \(ref)")
+            WHEN "LEAVE" DO
+                Locals := {}
         END CASE
     ELSE
         error("Invalid operand on line \(i): \(words[0])")
