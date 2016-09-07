@@ -1,3 +1,6 @@
+% ToDo: RECORDs - Write test code that demonstrates REOCRDs, construction, and usage, as well as exportation of RECORDs.
+% ToDo: CONSTNAT - Write test code that demonstrates the use of the CONST keyword, as well as the exportation of CONSTANT values.
+
 IMPORT ByteCode
 IMPORT file
 IMPORT io
@@ -10,8 +13,11 @@ TYPE Exception IS ByteCode.ExceptInfo
 TYPE Bytecode IS ByteCode.Bytecode
 TYPE Pair IS ByteCode.Pair
 
+% Command line option variables
+VAR bQuiet: Boolean
+
+% Setup Bytecode generator
 VAR code: Bytecode := Bytecode()
-code.reset()
 
 LET Tokens: Dictionary<Number> := {
     "ENTER":        0, 
@@ -97,6 +103,7 @@ LET Tokens: Dictionary<Number> := {
     "PUSHNIL":      80,     %| push nil pointer                     |%
     "JNASSERT":     81,     %| jump if assertions disabled          |%
     "RESETC":       82,     %| reset cell                           |%
+    "PUSHPEG":      83,     %| push pointer to external global      |%
 }
 
 LET Directives: Dictionary<Number> := {
@@ -112,13 +119,41 @@ LET Directives: Dictionary<Number> := {
     ".local":       10,     %| Create a local variable              |%
 }
 
-LET source: String := sys.args[1]
+IF sys.args.size() <= 1 THEN
+    LET usage: String := @@"Neon Bytecode Assembler v.8 - https://github.com/ghewgill/neon-lang
+
+Usage:
+  neonx asm.neonx [options] file1 file2 file3...filex
+
+ Where [options] is one or more of:
+     -q        Quiet
+"@@
+    print(usage)
+    sys.exit(1)
+END IF
+
+VAR sourceFiles: Array<String> := []
+
+FOREACH o IN sys.args[1 TO LAST] DO
+    IF o[FIRST] = "-" OR o[FIRST] = "/" THEN
+        LET option: String := o[1 TO LAST]
+        IF option = "q" OR option = "Q" THEN
+            bQuiet := TRUE
+        END IF
+    ELSE
+        sourceFiles.append(o)
+    END IF
+END FOREACH
+
+FOREACH f IN sourceFiles DO
+    assemble(f)
+END FOREACH
 
 FUNCTION makeOutputFilename(s: String): String
     VAR dir, fn: String := ""
     file.pathSplit(s, OUT dir, OUT fn)
     IF NOT string.hasSuffix(fn, ".neona") THEN
-        error("Not a valid neon assembly file.")
+        error("Not a valid neon assembly file.", 1)
     END IF
     RETURN file.pathJoin(dir, fn[FIRST TO LAST-6] & ".neonx")
 END FUNCTION
@@ -226,256 +261,303 @@ FUNCTION getModule(fn: String): Bytecode
     RETURN mod
 END FUNCTION
 
-LET outfn: String := makeOutputFilename(source)
-LET lines: Array<String> := file.readLines(source)
-VAR Imports: Array<String> := []
-VAR Functions: Dictionary<FunctionData> := {}
-VAR Constants: Dictionary<String> := {}
-VAR Locals: Dictionary<String> := {}
-VAR Labels: Dictionary<Number> := {}
-VAR Fixups: Array<JumpTable> := []
-VAR ExceptionHandlers: Dictionary<Exception> := {}
-VAR CurrentException: Array<String> := []
-VAR Exceptions: Array<String> := []
-VAR numLines: Number := lines.size()
+FUNCTION assemble(fn: String)
+    LET outfn: String := makeOutputFilename(fn)
+    LET lines: Array<String> := file.readLines(fn)
+    VAR Imports: Array<String> := []
+    VAR Functions: Dictionary<FunctionData> := {}
+    VAR Constants: Dictionary<String> := {}
+    VAR Locals: Dictionary<String> := {}
+    VAR Labels: Dictionary<Number> := {}
+    VAR Modules: Dictionary<Bytecode> := {}
+    VAR Fixups: Array<JumpTable> := []
+    VAR ExceptionHandlers: Dictionary<Exception> := {}
+    VAR CurrentException: Array<String> := []
+    VAR Exceptions: Array<String> := []
+    VAR numLines: Number := lines.size()
 
-FOREACH s IN lines INDEX i DO
-    VAR line: String := ""
-    VAR ln: String := string.trim(s)
+    code.reset()
+    FOREACH s IN lines INDEX i DO
+        VAR line: String := ""
+        VAR ln: String := string.trim(s)
 
-    IF s = "" OR s[FIRST] = ";" OR string.trim(s) = "" THEN % ignore blank, and commented out lines.
-        NEXT FOREACH
-    END IF
-
-    IF string.find(s, ";") > 0 THEN
-        ln := string.trim(s[FIRST TO string.find(s, ";")-1]) % Eat comments before processing the code.
-    END IF
-
-    IF ln[0] = ":" THEN
-        IF ln[1 TO LAST] IN Labels THEN
-            error("Duplicate label definition on line \(i).", 1)
+        IF ln = "" OR ln[FIRST] = ";" THEN % ignore blank, and commented out lines.
+            NEXT FOREACH
         END IF
-        Labels[ln[1 TO LAST]] := code.getCurrentAddress()
-        NEXT FOREACH
-    END IF
-    
-    VAR ref: Number := 0
-    LET words: Array<String> := string.split(string.trim(ln), " ")
-    IF words.size() <= 0 THEN
-        words.append(string.trim(ln))
-    END IF
-    IF string.hasPrefix(words[0], ".") THEN
-        LET directives: Array<String> := string.split(string.trim(ln), ":")
-        IF directives[0] IN Directives THEN
-            CASE directives[0]
-                WHEN ".GlobalSize" DO
-                    code.global_size := code.global_size + num(string.trim(directives[1]))
-                WHEN ".const", ".local" DO
-                    LET values: Array<String> := string.split(string.trim(directives[1]), " ")
-                    IF values.size() < 2 THEN
-                        error("Missing value:  Expected value; line \(i).", 1)
-                    END IF
-                    IF directives[0] = ".const" THEN
-                        IF values[0] IN Constants THEN
-                            error("Duplicate inentifier \"\(values[0])\" on line \(i)", 1)
-                        END IF
-                        Constants[values[0]] := string.trim(values[1])
-                    ELSE
-                        IF values[0] IN Locals THEN
-                            error("Duplicate inentifier \"\(values[0])\" on line \(i)", 1)
-                        END IF
-                        Locals[values[0]] := string.trim(values[1])
-                    END IF
-                WHEN ".begin" DO
-                    VAR f: FunctionData := FunctionData()
-                    LET name: String := string.trim(directives[1])
-                    IF name IN Functions THEN
-                        error("Function already declared. Error on line \(i).", 1)
-                    END IF
-                    f.name := name
-                    f.info.name := code.addString(name)
-                    Functions[name] := f % Get the function added to the function array first.
-                    Labels[name] := code.getCurrentAddress()
-                    Functions[name].info.entry := Labels[name]
-                WHEN ".import" DO
-                    IF string.trim(directives[1]) IN Imports THEN
-                        error("Duplicate import directive. \(i)", 1)
-                    END IF
 
-                    Imports.append(string.trim(directives[1]))
-                    _ := FindModule(Imports[LAST] & ".neonx")
-
-                    VAR p: Pair := Pair()
-                    p.first  := code.addString(string.trim(directives[1]))
-                    p.second := string.repeat("0", 32)
-                    code.imports.append(p)
-                WHEN ".exception" DO
-                    IF string.trim(directives[1]) IN Exceptions THEN
-                        error("Duplicate exception declared.  Line: \(i)", 1)
-                    END IF
-
-                    Exceptions.append(string.trim(directives[1]))
-                WHEN ".try" DO
-                    CurrentException.append(string.trim(directives[1]))
-                    IF CurrentException[LAST] IN ExceptionHandlers THEN
-                        error("Duplicate structured exception handler declared.  Each block must have a unique name.  Line: \(i)", 1)
-                    END IF
-
-                    VAR e: Exception := Exception()
-                    e.start := code.getCurrentAddress()
-                    ExceptionHandlers[CurrentException[LAST]] := e
-                WHEN ".catch" DO
-                    LET excp: String := string.trim(directives[1])
-                    
-                    IF excp IN Exceptions THEN
-                        ExceptionHandlers[CurrentException[LAST]].end := code.getCurrentAddress()
-                        ExceptionHandlers[CurrentException[LAST]].handler := code.getCurrentAddress()
-                        ExceptionHandlers[CurrentException[LAST]].excid := code.addString(excp)
-                        code.exceptions.append(ExceptionHandlers[CurrentException[LAST]])
-                    ELSE
-                        error("Exception \"\(excp)\" not declared.  Line(i).", 1)
-                    END IF
-                WHEN ".finish" DO
-                    CurrentException := CurrentException[FIRST TO LAST-1]
-            END CASE
+        IF string.find(ln, ";") > 0 THEN
+            ln := string.trim(ln[FIRST TO string.find(ln, ";")-1]) % Eat comments before processing the code.
         END IF
-        NEXT FOREACH
-    END IF
 
-    IF words[0] IN Tokens THEN
-        line.append("\(code.getCurrentAddress())\t")
-        code.code.append(Tokens[words[0]])
-        line.append(words[0])
-        LET operand: String := string.trim(ln[string.find(ln, " ") + 1 TO LAST])
-        CASE words[0]
-            WHEN "PUSHN" DO                                         % push number immediate
-                IF operand IN Constants THEN
-                    ref := code.addString(Constants[operand])
-                ELSE
+        IF ln[0] = ":" THEN
+            IF ln[1 TO LAST] IN Labels THEN
+                error("Duplicate label definition on line \(i).", 1)
+            END IF
+            Labels[ln[1 TO LAST]] := code.getCurrentAddress()
+            NEXT FOREACH
+        END IF
+        
+        VAR ref: Number := 0
+        LET words: Array<String> := string.split(string.trim(ln), " ")
+        IF words.size() <= 0 THEN
+            words.append(string.trim(ln))
+        END IF
+        IF string.hasPrefix(words[0], ".") THEN
+            LET directives: Array<String> := string.split(string.trim(ln), ":")
+            IF directives[0] IN Directives THEN
+                CASE directives[0]
+                    WHEN ".GlobalSize" DO
+                        code.global_size := code.global_size + num(string.trim(directives[1]))
+                    WHEN ".const", ".local" DO
+                        LET values: Array<String> := string.split(string.trim(directives[1]), " ")
+                        IF values.size() < 2 THEN
+                            error("Missing value:  Expected value; line \(i).", 1)
+                        END IF
+                        IF directives[0] = ".const" THEN
+                            IF values[0] IN Constants THEN
+                                error("Duplicate inentifier \"\(values[0])\" on line \(i)", 1)
+                            END IF
+                            Constants[values[0]] := string.trim(values[1])
+                        ELSE
+                            IF values[0] IN Locals THEN
+                                error("Duplicate inentifier \"\(values[0])\" on line \(i)", 1)
+                            END IF
+                            Locals[values[0]] := string.trim(values[1])
+                        END IF
+                    WHEN ".begin" DO
+                        VAR f: FunctionData := FunctionData()
+                        LET name: String := string.trim(directives[1])
+                        IF name IN Functions THEN
+                            error("Function already declared. Error on line \(i).", 1)
+                        END IF
+                        f.name := name
+                        f.info.name := code.addString(name)
+                        Functions[name] := f % Get the function added to the function array first.
+                        Labels[name] := code.getCurrentAddress()
+                        Functions[name].info.entry := Labels[name]
+                    WHEN ".import" DO
+                        IF string.trim(directives[1]) IN Imports THEN
+                            error("Duplicate import directive. \(i)", 1)
+                        END IF
+
+                        Imports.append(string.trim(directives[1]))
+                        Modules[Imports[LAST]] := getModule(Imports[LAST] & ".neonx")
+
+                        VAR p: Pair := Pair()
+                        p.first  := code.addString(string.trim(directives[1]))
+                        p.second := string.repeat("0", 32)
+                        code.imports.append(p)
+                    WHEN ".exception" DO
+                        IF string.trim(directives[1]) IN Exceptions THEN
+                            error("Duplicate exception declared.  Line: \(i)", 1)
+                        END IF
+
+                        Exceptions.append(string.trim(directives[1]))
+                    WHEN ".try" DO
+                        CurrentException.append(string.trim(directives[1]))
+                        IF CurrentException[LAST] IN ExceptionHandlers THEN
+                            error("Duplicate structured exception handler declared.  Each block must have a unique name.  Line: \(i)", 1)
+                        END IF
+
+                        VAR e: Exception := Exception()
+                        e.start := code.getCurrentAddress()
+                        ExceptionHandlers[CurrentException[LAST]] := e
+                    WHEN ".catch" DO
+                        LET excp: String := string.trim(directives[1])
+                        
+                        IF excp IN Exceptions THEN
+                            ExceptionHandlers[CurrentException[LAST]].end := code.getCurrentAddress()
+                            ExceptionHandlers[CurrentException[LAST]].handler := code.getCurrentAddress()
+                            ExceptionHandlers[CurrentException[LAST]].excid := code.addString(excp)
+                            code.exceptions.append(ExceptionHandlers[CurrentException[LAST]])
+                        ELSE
+                            error("Exception \"\(excp)\" not declared.  Line(i).", 1)
+                        END IF
+                    WHEN ".finish" DO
+                        CurrentException := CurrentException[FIRST TO LAST-1]
+                END CASE
+            END IF
+            NEXT FOREACH
+        END IF
+
+        IF words[0] IN Tokens THEN
+            line.append("\(code.getCurrentAddress())\t")
+            code.code.append(Tokens[words[0]])
+            line.append(words[0])
+            LET operand: String := string.trim(ln[string.find(ln, " ") + 1 TO LAST])
+            CASE words[0]
+                WHEN "PUSHN" DO                                         % push number immediate
+                    IF operand IN Constants THEN
+                        ref := code.addString(Constants[operand])
+                    ELSE
+                        IF operand IN Locals THEN
+                            ref := num(Locals[operand])
+                        END IF
+                        ref := code.addString(operand)
+                    END IF
+                    line.append(" \(ref)")
+                    code.referenceString(ref)
+                WHEN "CALLP", "CALLMF" DO                               % call predefined function, call module function
+                    VAR dest: String := ""
+                    VAR module: String := ""
+                    IF string.find(operand, ".") > 0 THEN
+                        % Attempting to call a function in an imported module.
+                        module := operand[FIRST TO string.find(operand, ".")-1]
+                        IF module IN Imports THEN
+                            ref := code.addString(module)
+                            IF words[0] = "CALLMF" THEN
+                                dest := module % Setup Neon module call
+                            END IF
+                        ELSE
+                            error("Unknown module, or module not imported.  Line \(i)")
+                        END IF
+                    ELSE
+                        % Attempting to call a predefined function.
+                        dest := operand
+                    END IF
+                    ref := code.addString(dest)
+                    line.append(" \(dest) : (\(ref))")
+                    code.referenceString(ref)
+                    IF words[0] = "CALLMF" THEN
+                        %LET bc: Bytecode := getModule("\(module).neonx")
+                        LET bc: Bytecode := Modules[module]
+                        FOREACH bcf IN bc.functions DO
+                            IF bc.strtable[bcf.name] = operand[string.find(operand, ".")+1 TO LAST] THEN
+                                code.referenceAddress(bcf.entry)
+                                EXIT FOREACH
+                            END IF
+                        END FOREACH
+                    END IF
+                WHEN "PUSHPPG" DO                                       % push pointer to predefined global
+                    VAR dest: String := ""
+                    VAR module: String := ""
+                    IF string.find(operand, ".") > 0 THEN
+                        % Global variable in a module
+                        dest   := operand[string.find(operand, ".") + 1 TO LAST]
+                        module := operand[FIRST TO string.find(operand, ".")-1]
+                        IF module IN Imports THEN
+                            IF module IN [ "sys", "io" ] AND dest IN [ "args", "stdout", "stdin", "stderr" ] THEN
+                                %LET bc: Bytecode := Modules[module]
+                                %ref := bc.getStringIndex("\(module)$\(dest)") % Create an actual Neon-syntax string.
+                                %IF ref = -1 THEN
+                                %    error("Variable \(dest) does not exist in module \(module).  Line: \(i)", 1)
+                                %END IF
+                            ELSE
+                                error("Variable \(dest) does not exist in module \(module).  Line: \(i)", 1)
+                            END IF
+                        ELSE
+                            error("Unknown module, or module not imported.  Line \(i)")
+                        END IF
+                    ELSE
+                        % Attempting to call a predefined function.
+                        dest := operand
+                    END IF
+                    ref := code.addString("\(module)$\(dest)")
+                    line.append(" \"\(module).\(dest)[\(ref)]")
+                    code.referenceString(ref)
+                WHEN "PUSHS" DO                                         % push string immediate
+                    IF operand[0] # "\"" THEN
+                        error("Expected \".")
+                    END IF
+                    ref := code.addString(parseString(operand))
+                    line.append(" \(ref)")
+                    code.referenceString(ref)
+                WHEN "PUSHB" DO
+                    IF operand IN Constants THEN
+                        ref := num(Constants[operand])
+                    ELSE
+                        ref := num(operand)
+                    END IF
+                    ASSERT ref <= 0x1
+                    line.append(" \(ref)")
+                    code.referenceBoolean((IF ref = 0 THEN FALSE ELSE TRUE))
+                WHEN "PUSHPG", "CONSA" DO                               % push pointer to global, Construct Array
+                    IF operand IN Constants THEN
+                        ref := num(Constants[operand])
+                    ELSE
+                        ref := num(operand)
+                    END IF
+                    ASSERT ref <= 0xFFFFFFFF
+                    line.append(" \(ref)")
+                    code.referenceVariable(ref)
+                WHEN "PUSHPL" DO
                     IF operand IN Locals THEN
                         ref := num(Locals[operand])
-                    END IF
-                    ref := code.addString(operand)
-                END IF
-                line.append(" \(ref)")
-                code.referenceString(ref)
-            WHEN "CALLP", "CALLMF" DO                                         % call predefined function, call module function
-                VAR dest: String := ""
-                VAR module: String := ""
-                IF string.find(operand, ".") > 0 THEN
-                    % Attempting to call a function in an imported module.
-                    module := operand[FIRST TO string.find(operand, ".")-1]
-                    IF module IN Imports THEN
-                        ref := code.addString(module)
-                        IF words[0] = "CALLMF" THEN
-                            dest := module % Setup Neon module call
-                        END IF
                     ELSE
-                        error("Unknown module, or module not imported.  Line \(i)")
+                        ref := num(operand)
                     END IF
-                ELSE
-                    % Attempting to call a predefined function.
-                    dest := operand
-                END IF
-                ref := code.addString(dest)
-                line.append(" \(dest) : (\(ref))")
-                code.referenceString(ref)
-                IF words[0] = "CALLMF" THEN
-                    LET bc: Bytecode := getModule("\(module).neonx")
-                    FOREACH bcf IN bc.functions DO
-                        IF bc.strtable[bcf.name] = operand[string.find(operand, ".")+1 TO LAST] THEN
-                            code.referenceAddress(bcf.entry)
-                            EXIT FOREACH
-                        END IF
-                    END FOREACH
-                END IF
-            WHEN "PUSHS" DO                                         % push string immediate
-                IF operand[0] # "\"" THEN
-                    error("Expected \".")
-                END IF
-                ref := code.addString(parseString(operand))
-                line.append(" \(ref)")
-                code.referenceString(ref)
-            WHEN "PUSHPG", "CONSA" DO                               % push pointer to global, Construct Array
-                IF operand IN Constants THEN
-                    ref := num(Constants[operand])
-                ELSE
-                    ref := num(operand)
-                END IF
-                ASSERT ref <= 0xFFFFFFFF
-                line.append(" \(ref)")
-                code.referenceVariable(ref)
-            WHEN "PUSHPL" DO
-                IF operand IN Locals THEN
-                    ref := num(Locals[operand])
-                ELSE
-                    ref := num(operand)
-                END IF
-                ASSERT ref <= 0xFFFFFFFF
-                line.append(" \(ref)")
-                code.referenceVariable(ref)
-            WHEN "STOREN" DO                                        % store number
-                line.append("") % TODO: print the variable name, or imediate value if there is one.
-            WHEN "LOADN" DO                                         % load number
-                line.append("") % TODO: print the variable name, or imediate value if there is one.
-            WHEN "ENTER" DO
-                VAR frames: Array<String> := string.split(ln[words[0].length() + 1 TO LAST], ",")
-                IF frames.size() # 2 THEN
-                    error("Incorrect operands for opcode: \(words[0]) line \(i).", 1)
-                END IF
-                code.referenceAddress(num(frames[0]))
-                code.referenceAddress(num(frames[1]))
-                line.append(" \(frames[0]) , \(frames[1])")
-            WHEN "EXCEPT" DO
-                IF operand[0] # "\"" THEN
-                    error("Expected \".")
-                END IF
-                IF parseString(operand) IN Exceptions THEN
-                    ref := code.addString(parseString(operand))
-                ELSE
-                    error("Exception not declared. Line\(i).")
-                END IF
-                line.append(" \(ref)")
-                code.referenceString(ref)
-            WHEN "JUMP", "JF", "CALLF" DO
-                IF operand IN Labels THEN
-                    ref := Labels[operand]
-                ELSE
-                    LET fixup: JumpTable := JumpTable(location WITH code.getCurrentAddress(),
-                                                         label WITH operand,
-                                                          line WITH i)
-                    ref := 0
-                    Fixups.append(fixup)
-                    line.append(" [ForwardDecl]: ")
-                END IF
-                code.referenceAddress(ref)
-                line.append(" \(ref)")
-            WHEN "LEAVE" DO
-                Locals := {}
-        END CASE
-    ELSE
-        error("Invalid operand on line \(i): \(words[0])")
-    END IF
-    print(line)
-END FOREACH
-
-IF Functions.size() > 0 THEN
-    print("Linking functions...")
-    FOREACH f IN Functions.keys() DO
-        code.functions.append(Functions[f].info)
+                    ASSERT ref <= 0xFFFFFFFF
+                    line.append(" \(ref)")
+                    code.referenceVariable(ref)
+                WHEN "STOREN" DO                                        % store number
+                    line.append("") % TODO: print the variable name, or imediate value if there is one.
+                WHEN "LOADN" DO                                         % load number
+                    line.append("") % TODO: print the variable name, or imediate value if there is one.
+                WHEN "ENTER" DO
+                    VAR frames: Array<String> := string.split(ln[words[0].length() + 1 TO LAST], ",")
+                    IF frames.size() # 2 THEN
+                        error("Incorrect operands for opcode: \(words[0]) line \(i).", 1)
+                    END IF
+                    code.referenceAddress(num(frames[0]))
+                    code.referenceAddress(num(frames[1]))
+                    line.append(" \(frames[0]), \(frames[1])")
+                WHEN "EXCEPT" DO
+                    IF operand[0] # "\"" THEN
+                        error("Expected \".")
+                    END IF
+                    IF parseString(operand) IN Exceptions THEN
+                        ref := code.addString(parseString(operand))
+                    ELSE
+                        error("Exception not declared. Line\(i).")
+                    END IF
+                    line.append(" \(ref)")
+                    code.referenceString(ref)
+                WHEN "JUMP", "JF", "JT", "CALLF" DO
+                    IF operand IN Labels THEN
+                        ref := Labels[operand]
+                    ELSE
+                        LET fixup: JumpTable := JumpTable(location WITH code.getCurrentAddress(),
+                                                             label WITH operand,
+                                                              line WITH i)
+                        ref := 0
+                        Fixups.append(fixup)
+                        line.append(" [ForwardDecl]: ")
+                    END IF
+                    code.referenceAddress(ref)
+                    line.append(" \(ref)")
+                WHEN "LEAVE" DO
+                    Locals := {}
+            END CASE
+        ELSE
+            error("Invalid operand on line \(i): \(ln)")
+        END IF
+        IF NOT bQuiet THEN
+            print(line)
+        END IF
     END FOREACH
-END IF
-FOREACH f IN Fixups DO
-    IF f.label IN Labels THEN
-        code.fixupAddress(f.location, Labels[f.label])
-    ELSE
-        io.fprint(io.stderr, "Undefined label: \(f.label) on line \(f.line).")
-        sys.exit(1)
-    END IF
-END FOREACH
-IF CurrentException.size() > 0 THEN
-    error("Missing .finish operand for exception \(CurrentException[LAST]).", 1)
-END IF
-print("Compiled \(numLines) lines.")
 
-code.toFile(outfn)
+    IF Functions.size() > 0 THEN
+        IF NOT bQuiet THEN
+            print("Linking functions...")
+        END IF
+        FOREACH f IN Functions.keys() DO
+            code.functions.append(Functions[f].info)
+        END FOREACH
+    END IF
+    FOREACH f IN Fixups DO
+        IF f.label IN Labels THEN
+            code.fixupAddress(f.location, Labels[f.label])
+        ELSE
+            io.fprint(io.stderr, "Undefined label: \(f.label) on line \(f.line).")
+            sys.exit(1)
+        END IF
+    END FOREACH
+    IF CurrentException.size() > 0 THEN
+        error("Missing .finish operand for exception \(CurrentException[LAST]).", 1)
+    END IF
+
+    IF NOT bQuiet THEN
+        print("Compiled \(numLines) lines.")
+    END IF
+    code.toFile(outfn)
+END FUNCTION

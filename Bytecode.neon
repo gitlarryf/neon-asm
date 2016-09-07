@@ -21,33 +21,90 @@ EXPORT DECLARE EXCEPTION BytecodeException
  |%
 EXPORT TYPE CodeBytes IS Array<Number>
 
+%|
+ |  Type: Type
+ |
+ |  A RECORD defined in the bytecode.
+ |
+ |  Fields:
+ |      name - the string table index of the name of this RECORD type.
+ |      descriptor - 
+ |%
 EXPORT TYPE Type IS RECORD
     name        : Number
     descriptor  : Number
 END RECORD
 
+%|
+ |  Type: Function
+ |
+ |  A function that is exported from the neon bytecode stream.
+ |
+ |  Fields:
+ |      name - the string table index of the name of this FUNCTION type.
+ |      descriptor - 
+ |      entry - bytecode offset to the entry point of this function.
+ |%
 EXPORT TYPE Function IS RECORD
     name        : Number
     descriptor  : Number
     entry       : Number
 END RECORD
 
+%|
+ |  Type: Constant
+ |
+ |  A constant that is exported from the neon bytecode stream.
+ |
+ |  Fields:
+ |      name - the string table index of the name of this CONSTANT.
+ |      type - 
+ |      value - array of numbers that represent the value of this constant.
+ |%
 EXPORT TYPE Constant IS RECORD
     name    : Number
     type    : Number
     value   : Array<Number>
 END RECORD
 
+%|
+ |  Type: Variable
+ |
+ |  A variable that is exported from the neon bytecode stream.
+ |
+ |  Fields:
+ |      name - the string table index of the name of this variable.
+ |      type - 
+ |      index - 
+ |%
 EXPORT TYPE Variable IS RECORD
     name    : Number
     type    : Number
     index   : Number
 END RECORD
 
+%|
+ |  Type: ExceptionExport
+ |
+ |  An exception that is exported from the neon bytecode stream.
+ |
+ |  Fields:
+ |      name - the string table index of the name of this EXCEPTION.
+ |%
 EXPORT TYPE ExceptionExport IS RECORD
     name    : Number
 END RECORD
 
+%|
+ |  Type: ExceptInfo
+ |
+ |  A function that is exported from the neon bytecode stream.
+ |
+ |  Fields:
+ |      name - the string table index of the name of this FUNCTION type.
+ |      descriptor - 
+ |      entry - bytecode offset to the entry point of this function.
+ |%
 EXPORT TYPE ExceptInfo IS RECORD
     start   : Number
     end     : Number
@@ -55,11 +112,21 @@ EXPORT TYPE ExceptInfo IS RECORD
     handler : Number
 END RECORD
 
+%|
+ |  Type: FunctionInfo
+ |
+ |  A stream of bytes that comprise a valid Neon bytecode stream.
+ |%
 EXPORT TYPE FunctionInfo IS RECORD
     name    : Number
     entry   : Number
 END RECORD
 
+%|
+ |  Type: Pair
+ |
+ |  A stream of bytes that comprise a valid Neon bytecode stream.
+ |%
 EXPORT TYPE Pair IS RECORD
     first   : Number
     second  : String
@@ -79,8 +146,8 @@ END RECORD
  |      export_functions - the defined functions being exported by the bytecode, if any.
  |      export_exceptions - the defined exceptions being exported by the bytecode, if any.
  |      imports - the requested imports required by the bytecode, if any.
- |      functions - 
- |      exceptions - 
+ |      functions - an array of FunctionInfo for each function in the Neon bytecode, if any.
+ |      exceptions - an array of ExceptInfo for each exception, and the handler for that Structured Exception Handler block.
  |      code - the Neon bytecode stream.
  |%
 EXPORT TYPE Bytecode IS RECORD
@@ -120,7 +187,6 @@ FUNCTION Bytecode.reset(INOUT self: Bytecode)
 END FUNCTION
  
 FUNCTION Bytecode.fromBytes(INOUT self: Bytecode, bytes: Bytes): Bytecode
-    %VAR r: Bytecode := Bytecode()
     IF self.load(bytes.toArray()) THEN
         RETURN self
     END IF
@@ -241,47 +307,6 @@ FUNCTION Bytecode.load(INOUT self: Bytecode, bytes: Array<Number>): Boolean
     RETURN TRUE
 END FUNCTION
 
-FUNCTION put_uint16(INOUT obj: Array<Number>, x: Number)
-    obj.extend(struct.packUInt16BE(x).toArray())
-END FUNCTION
-
-FUNCTION put_uint32(INOUT obj: Array<Number>, x: Number)
-    obj.extend(struct.packUInt32BE(x).toArray())
-END FUNCTION
-
-FUNCTION set_uint32(INOUT obj: Array<Number>, addr: Number, value: Number)
-    obj[addr TO addr+3] := struct.packUInt32BE(value).toArray()
-END FUNCTION
-
-FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number
-    LET r: Number := struct.unpackUInt16BE(obj.toBytes())
-    i := i + 2
-    RETURN r
-END FUNCTION
-
-FUNCTION get_uint32(IN obj: Array<Number>, INOUT i: Number): Number
-    LET r: Number := struct.unpackUInt32BE(obj.toBytes())
-    i := i + 4
-    RETURN r
-END FUNCTION
-
-FUNCTION getstrtable(start, end: Number, obj: Array<Number>): Array<String>
-    VAR r: Array<String> := []
-    VAR s, e: Number := 0
-    s := start
-    e := end
-    WHILE s # e DO
-        LET len: Number := get_uint32(obj[s TO s+3], INOUT s)
-        VAR strent: String := ""
-        FOR x := s TO s+len-1 DO
-            strent.append(chr(obj[x]))
-            INC s
-        END FOR
-        r.append(strent)
-    END WHILE
-    RETURN r
-END FUNCTION
-
 FUNCTION Bytecode.getStringIndex(INOUT self: Bytecode, s: String): Number
     FOREACH st IN self.strtable INDEX i DO
         IF st = s THEN
@@ -319,6 +344,10 @@ FUNCTION Bytecode.referenceVariable(INOUT self: Bytecode, Value: Number)
     put_uint32(INOUT self.code, Value)
 END FUNCTION
 
+FUNCTION Bytecode.referenceBoolean(INOUT self: Bytecode, Value: Boolean)
+    put_uint8(INOUT self.code, (IF Value THEN 1 ELSE 0))
+END FUNCTION
+
 FUNCTION Bytecode.referenceAddress(INOUT self: Bytecode, address: Number)
     put_uint32(INOUT self.code, address)
 END FUNCTION
@@ -339,7 +368,7 @@ FUNCTION Bytecode.getBytes(INOUT self: Bytecode): Bytes
     VAR obj: Array<Number> := []
 
     IF self.source_hash.size() # 32 THEN
-        self.source_hash.extend(hash.sha256Raw(self.code.toString()).toArray())
+        self.source_hash.extend(hash.sha256Raw(self.code.toBytes()).toArray())
     END IF
     obj.extend(self.source_hash)
 
@@ -411,6 +440,51 @@ FUNCTION Bytecode.getBytes(INOUT self: Bytecode): Bytes
     RETURN obj.toBytes()
 END FUNCTION
 
+FUNCTION put_uint8(INOUT obj: Array<Number>, x: Number)
+    obj.extend(struct.packUInt8(x).toArray())
+END FUNCTION
+
+FUNCTION put_uint16(INOUT obj: Array<Number>, x: Number)
+    obj.extend(struct.packUInt16BE(x).toArray())
+END FUNCTION
+
+FUNCTION put_uint32(INOUT obj: Array<Number>, x: Number)
+    obj.extend(struct.packUInt32BE(x).toArray())
+END FUNCTION
+
+FUNCTION set_uint32(INOUT obj: Array<Number>, addr: Number, value: Number)
+    obj[addr TO addr+3] := struct.packUInt32BE(value).toArray()
+END FUNCTION
+
+FUNCTION get_uint16(IN obj: Array<Number>, INOUT i: Number): Number
+    LET r: Number := struct.unpackUInt16BE(obj.toBytes())
+    i := i + 2
+    RETURN r
+END FUNCTION
+
+FUNCTION get_uint32(IN obj: Array<Number>, INOUT i: Number): Number
+    LET r: Number := struct.unpackUInt32BE(obj.toBytes())
+    i := i + 4
+    RETURN r
+END FUNCTION
+
+FUNCTION getstrtable(start, end: Number, obj: Array<Number>): Array<String>
+    VAR r: Array<String> := []
+    VAR s, e: Number := 0
+    s := start
+    e := end
+    WHILE s # e DO
+        LET len: Number := get_uint32(obj[s TO s+3], INOUT s)
+        VAR strent: String := ""
+        FOR x := s TO s+len-1 DO
+            strent.append(chr(obj[x]))
+            INC s
+        END FOR
+        r.append(strent)
+    END WHILE
+    RETURN r
+END FUNCTION
+
 BEGIN MAIN
     IMPORT sys
 
@@ -420,7 +494,7 @@ BEGIN MAIN
     code.strtable.append("Hello, World!")
 
     code.code.extend([0x04, 0x00, 0x00, 0x00, 0x01, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x49])
-    code.source_hash.extend(hash.sha256Raw(code.code.toString()).toArray())
+    code.source_hash.extend(hash.sha256Raw(code.code.toBytes()).toArray())
 
     file.writeBytes("./tmp/asmTest.neonx", code.getBytes())
     %sys.exit(0)
